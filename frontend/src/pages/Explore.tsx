@@ -1,0 +1,170 @@
+import { useState, useEffect } from "react";
+import { motion } from "framer-motion";
+import { Search, MapPin, Compass } from "lucide-react";
+import BottomNav from "@/components/BottomNav";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/lib/supabaseClient";
+import type { Location } from "@/types/database";
+
+const categories = [
+  { id: "All", emoji: "🏠", label: "All" },
+  { id: "Nature", emoji: "🌿", label: "Nature" },
+  { id: "Beach", emoji: "🏖️", label: "Beach" },
+  { id: "Mountain", emoji: "🏔️", label: "Mountain" },
+  { id: "Cultural", emoji: "🏛️", label: "Cultural" },
+  { id: "Spiritual", emoji: "🧘", label: "Spiritual" },
+  { id: "Temple", emoji: "🛕", label: "Temple" },
+  { id: "Heritage", emoji: "🏯", label: "Heritage" },
+];
+
+const Explore = () => {
+  const navigate = useNavigate();
+  const [search, setSearch] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("All");
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchLocations = async () => {
+      setLoading(true);
+      let query = supabase
+        .from("locations")
+        .select("*, guide:profiles!locations_guide_id_fkey(id, name, profile_photo_url, city, rating)")
+        .eq("status", "active")
+        .order("created_at", { ascending: false });
+
+      if (selectedCategory !== "All") {
+        query = query.eq("category", selectedCategory);
+      }
+
+      const { data, error } = await query;
+      if (error) {
+        console.error("Failed to load locations:", error.message);
+        setLocations([]);
+      } else {
+        setLocations((data ?? []) as Location[]);
+      }
+      setLoading(false);
+    };
+    fetchLocations();
+  }, [selectedCategory]);
+
+  const filteredItems = locations.filter((loc) => {
+    const haystack = [loc.title, loc.guide?.city ?? "", ...(loc.tags ?? [])].join(" ").toLowerCase();
+    return haystack.includes(search.toLowerCase());
+  });
+
+  return (
+    <div className="min-h-screen gradient-sky pb-24 text-foreground">
+      <div className="px-6 pt-8 pb-4">
+        <h1 className="text-2xl font-bold text-foreground font-display">Explore India</h1>
+        <p className="text-sm text-muted-foreground mt-1">Discover guide-authored spots in every city</p>
+      </div>
+
+      <div className="px-6 mb-6">
+        <div className="glass rounded-3xl px-5 py-4 flex items-center gap-4 shadow-elevated border border-primary/10">
+          <Search size={22} className="text-primary animate-pulse" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search spots, cities, tags..."
+            className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+          />
+        </div>
+      </div>
+
+      <div className="flex gap-3 overflow-x-auto px-6 mb-8 hide-scrollbar">
+        {categories.map((c) => (
+          <button
+            key={c.id}
+            onClick={() => setSelectedCategory(c.id)}
+            className={`px-5 py-3 rounded-2xl text-[13px] font-bold whitespace-nowrap transition-all flex items-center gap-2 ${
+              selectedCategory === c.id
+                ? "gradient-primary text-primary-foreground shadow-glow scale-105"
+                : "glass text-foreground border border-primary/5 hover:bg-white/40"
+            }`}
+          >
+            <span className="text-lg">{c.emoji}</span>
+            <span>{c.label}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="px-6">
+        <h2 className="text-xs font-bold text-foreground mb-4 flex items-center justify-between">
+          <span className="flex items-center gap-1.5">
+            <Compass size={14} className="text-primary animate-spin-slow" />
+            {search ? `Searching for "${search}"` : `${selectedCategory} Destinations & Spots`}
+          </span>
+          <span className="text-[10px] uppercase tracking-wider bg-primary/10 text-primary px-2.5 py-0.5 rounded-full font-bold">
+            {filteredItems.length} found
+          </span>
+        </h2>
+
+        {loading ? (
+          <div className="grid grid-cols-2 gap-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="aspect-[3/4] rounded-[2rem] bg-muted/50 animate-pulse" />
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-4">
+            {filteredItems.length > 0 ? (
+              filteredItems.map((loc, i) => (
+                <motion.button
+                  key={loc.id}
+                  initial={{ y: 20, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ delay: Math.min(i * 0.05, 0.5) }}
+                  onClick={() => navigate(`/location/${loc.id}`)}
+                  className="flex flex-col text-left group"
+                >
+                  <div className="relative aspect-[3/4] w-full rounded-[2rem] overflow-hidden shadow-card mb-2 border border-white/20 bg-secondary">
+                    {loc.photos?.[0] ? (
+                      <img
+                        src={loc.photos[0]}
+                        alt={loc.title}
+                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                        <MapPin size={28} />
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
+
+                    <div className="absolute top-3 right-3 h-6 px-2.5 glass-dark rounded-full flex items-center text-[8px] font-extrabold text-white uppercase tracking-wider">
+                      {loc.category}
+                    </div>
+
+                    <div className="absolute bottom-4 left-4 right-4">
+                      <p className="text-white/80 text-[10px] font-bold flex items-center gap-1 mb-1">
+                        <MapPin size={10} className="text-accent fill-accent/20" /> {loc.guide?.city || "India"}
+                      </p>
+                      <h3 className="text-white text-sm font-extrabold leading-tight line-clamp-2">{loc.title}</h3>
+                      <p className="text-[9px] text-white/60 font-semibold truncate mt-1">
+                        By {loc.guide?.name || "Local Guide"}
+                      </p>
+                    </div>
+                  </div>
+                </motion.button>
+              ))
+            ) : (
+              <div className="col-span-2 py-20 text-center glass rounded-3xl border border-dashed border-foreground/10">
+                <div className="w-16 h-16 bg-primary/5 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <span className="text-3xl">🏙️</span>
+                </div>
+                <p className="text-sm font-bold text-foreground">No destinations found</p>
+                <p className="text-xs text-muted-foreground mt-1">Try another category or search query</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <BottomNav />
+    </div>
+  );
+};
+
+export default Explore;

@@ -1,0 +1,13 @@
+{
+  "name": "backend",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "seed": "node seed.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.4",
+    "dotenv": "^17.4.1"
+  }
+}
