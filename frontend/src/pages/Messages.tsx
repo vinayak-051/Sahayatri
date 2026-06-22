@@ -10,6 +10,7 @@ import type { Message } from "@/types/database";
 interface Conversation {
   userId: string;
   userName: string;
+  isVerifiedGuide: boolean;
   lastMessage: string;
   timestamp: string;
   unread: boolean;
@@ -49,15 +50,17 @@ const Messages = () => {
       setConversations([]);
       return;
     }
-    const { data: profiles } = await supabase.from("profiles").select("id, name").in("id", partnerIds);
-    const nameById = new Map((profiles ?? []).map((p) => [p.id, p.name]));
+    const { data: profiles } = await supabase.from("profiles").select("id, name, role, is_verified").in("id", partnerIds);
+    const profileById = new Map((profiles ?? []).map((p) => [p.id, p]));
 
     setConversations(
       partnerIds.map((id) => {
         const m = byPartner.get(id)!;
+        const p = profileById.get(id);
         return {
           userId: id,
-          userName: nameById.get(id) || "User",
+          userName: p?.name || "User",
+          isVerifiedGuide: p?.role === "guide" && !!p?.is_verified,
           lastMessage: m.content,
           timestamp: m.created_at,
           unread: unreadByPartner.has(id),
@@ -218,7 +221,9 @@ const Messages = () => {
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-sm font-bold text-foreground truncate">{c.userName}</h3>
-                    <span className="text-[8px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-bold uppercase tracking-tighter">Verified</span>
+                    {c.isVerifiedGuide && (
+                      <span className="text-[8px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-bold uppercase tracking-tighter">Verified</span>
+                    )}
                   </div>
                   <span className="text-[9px] font-bold text-muted-foreground uppercase opacity-60">
                     {new Date(c.timestamp).toLocaleDateString() === new Date().toLocaleDateString()

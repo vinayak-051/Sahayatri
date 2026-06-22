@@ -30,6 +30,8 @@ import Notifications from "./pages/Notifications";
 import MapView from "./pages/MapView";
 import GuideLocations from "./pages/GuideLocations";
 import LocationDetail from "./pages/LocationDetail";
+import Terms from "./pages/Terms";
+import Privacy from "./pages/Privacy";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -49,6 +51,8 @@ const App = () => (
             <Route path="/guide-auth" element={<GuideAuth />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/terms" element={<Terms />} />
+            <Route path="/privacy" element={<Privacy />} />
             <Route path="/complete-profile" element={<ProtectedRoute role="any"><CompleteProfile /></ProtectedRoute>} />
 
             {/* Traveler */}

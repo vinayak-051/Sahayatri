@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import GuideBottomNav from "@/components/GuideBottomNav";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/context/AuthContext";
+import { validateImageFile } from "@/lib/validateImage";
 import type { Location } from "@/types/database";
 
 const GuideProfile = () => {
@@ -19,6 +20,7 @@ const GuideProfile = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editing, setEditing] = useState(false);
   const [myLocations, setMyLocations] = useState<Location[]>([]);
+  const [togglingAvailability, setTogglingAvailability] = useState(false);
 
   const [formData, setFormData] = useState({ name: "", bio: "", city: "", languages: "", specialization: "", ratePerDay: "" });
 
@@ -101,6 +103,11 @@ const GuideProfile = () => {
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
+    const validationError = validateImageFile(file);
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
     const ext = file.name.split(".").pop();
     const path = `${user.id}/avatar.${ext}`;
     const { error: uploadError } = await supabase.storage.from("avatars").upload(path, file, { upsert: true });
@@ -120,6 +127,21 @@ const GuideProfile = () => {
   const handleLogout = async () => {
     await logout();
     navigate("/");
+  };
+
+  const handleToggleAvailability = async () => {
+    if (!user) return;
+    setTogglingAvailability(true);
+    try {
+      const { error } = await supabase.from("profiles").update({ is_available: !user.is_available }).eq("id", user.id);
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+      await refreshProfile();
+    } finally {
+      setTogglingAvailability(false);
+    }
   };
 
   const earningsDisplay = stats.totalEarnings >= 1000 ? `₹${(stats.totalEarnings / 1000).toFixed(1)}k` : `₹${stats.totalEarnings}`;
@@ -158,9 +180,15 @@ const GuideProfile = () => {
             <span className="flex items-center gap-1 text-sm font-semibold">
               <Star size={14} className="text-accent fill-accent" /> {stats.avgRating ? stats.avgRating.toFixed(1) : "New"}
             </span>
-            <span className="flex items-center gap-1 text-[10px] text-primary font-bold bg-primary/10 px-2 py-0.5 rounded-full">
-              <Shield size={10} /> VERIFIED
-            </span>
+            {user.is_verified ? (
+              <span className="flex items-center gap-1 text-[10px] text-primary font-bold bg-primary/10 px-2 py-0.5 rounded-full">
+                <Shield size={10} /> VERIFIED
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 text-[10px] text-muted-foreground font-bold bg-secondary px-2 py-0.5 rounded-full">
+                <Shield size={10} /> NOT YET VERIFIED
+              </span>
+            )}
           </div>
           <button onClick={() => setShowEditModal(true)} className="mt-4 px-6 py-2.5 rounded-xl gradient-accent text-accent-foreground text-xs font-bold shadow-glow active:scale-95 transition-transform">
             Edit Profile
@@ -246,6 +274,22 @@ const GuideProfile = () => {
         </div>
 
         <div className="space-y-2 pb-6">
+          <button
+            onClick={handleToggleAvailability}
+            disabled={togglingAvailability}
+            className="w-full glass rounded-2xl p-4 shadow-card flex items-center gap-4 disabled:opacity-60"
+          >
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${user.is_available ? "bg-primary/10 text-primary" : "bg-secondary text-muted-foreground"}`}>
+              <span className="text-base">{user.is_available ? "✅" : "⏸️"}</span>
+            </div>
+            <span className="flex-1 text-sm font-medium text-left">
+              {user.is_available ? "Accepting bookings" : "Not accepting bookings"}
+            </span>
+            <div className={`w-11 h-6 rounded-full relative transition-colors ${user.is_available ? "gradient-primary" : "bg-secondary"}`}>
+              <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-all ${user.is_available ? "right-0.5" : "left-0.5"}`} />
+            </div>
+          </button>
+
           <div className="w-full glass rounded-2xl p-4 shadow-card flex items-center gap-4">
             <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center text-accent">
               <Globe size={18} />

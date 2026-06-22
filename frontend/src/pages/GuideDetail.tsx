@@ -89,6 +89,10 @@ const GuideDetail = () => {
       toast.error("Only travelers can book guides.");
       return;
     }
+    if (!guide.is_available) {
+      toast.error(`${guide.name} isn't accepting bookings right now.`);
+      return;
+    }
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     setBookingDate(tomorrow.toISOString().slice(0, 10));
@@ -162,9 +166,11 @@ const GuideDetail = () => {
               <Star size={16} className="text-accent fill-accent" /> {guide.rating || "New"}
             </span>
             <span className="text-xs text-muted-foreground">Local Expert</span>
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Shield size={14} className="text-primary" /> Verified ✅
-            </span>
+            {guide.is_verified && (
+              <span className="flex items-center gap-1 text-xs text-primary">
+                <Shield size={14} /> Verified ✅
+              </span>
+            )}
           </div>
         </motion.div>
 
@@ -286,9 +292,6 @@ const GuideDetail = () => {
                       <div>
                         <div className="flex items-center gap-1.5">
                           <span className="text-xs font-semibold text-foreground">{r.reviewer?.name}</span>
-                          <span className="flex items-center gap-0.5 text-[8px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-bold">
-                            <Shield size={7} /> Sahayatri Verified
-                          </span>
                         </div>
                         <div className="flex mt-0.5">
                           {Array.from({ length: 5 }).map((_, j) => (
@@ -313,10 +316,12 @@ const GuideDetail = () => {
         <div className="flex gap-3 max-w-sm mx-auto">
           <button
             onClick={openBookingForm}
-            disabled={booking}
-            className="flex-1 py-3.5 rounded-2xl gradient-primary text-primary-foreground font-semibold text-sm shadow-glow active:scale-95 transition-transform disabled:opacity-60"
+            disabled={booking || !guide.is_available}
+            className={`flex-1 py-3.5 rounded-2xl font-semibold text-sm active:scale-95 transition-transform disabled:opacity-60 ${
+              guide.is_available ? "gradient-primary text-primary-foreground shadow-glow" : "bg-secondary text-muted-foreground"
+            }`}
           >
-            Book Guide
+            {guide.is_available ? "Book Guide" : "Not Accepting Bookings"}
           </button>
           <button
             onClick={() => navigate(`/messages?userId=${guide.id}&userName=${encodeURIComponent(guide.name)}`)}

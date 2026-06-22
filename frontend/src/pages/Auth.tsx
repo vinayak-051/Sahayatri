@@ -199,6 +199,14 @@ const Auth = () => {
             </button>
           </form>
 
+          {!isLogin && (
+            <p className="text-center text-[11px] text-primary-foreground/50 mt-4">
+              By creating an account, you agree to our{" "}
+              <button onClick={() => navigate("/terms")} className="underline">Terms</button> and{" "}
+              <button onClick={() => navigate("/privacy")} className="underline">Privacy Policy</button>.
+            </p>
+          )}
+
           <p className="text-center text-sm text-primary-foreground/60 mt-6">
             {isLogin ? "Don't have an account?" : "Already have an account?"}{" "}
             <button

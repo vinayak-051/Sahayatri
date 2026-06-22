@@ -109,7 +109,7 @@ const Home = () => {
           {searchResults.guides.length > 0 && (
             <div className="mb-6">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-medium text-muted-foreground">Verified Guides</h3>
+                <h3 className="text-sm font-medium text-muted-foreground">Guides</h3>
                 <button onClick={() => navigate(`/guides?city=${searchResults.query}`)} className="text-[10px] text-primary font-bold">View All</button>
               </div>
               <div className="space-y-3">
@@ -117,7 +117,7 @@ const Home = () => {
                   <button key={g.id} onClick={() => navigate(`/guide/${g.id}`)} className="w-full glass rounded-2xl p-4 flex items-center gap-4 text-left shadow-card">
                     <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-2xl">🧭</div>
                     <div className="flex-1">
-                      <p className="text-sm font-bold text-foreground">{g.name} ✅</p>
+                      <p className="text-sm font-bold text-foreground">{g.name} {g.is_verified && "✅"}</p>
                       <p className="text-xs text-muted-foreground">{g.city} • {g.specialization}</p>
                     </div>
                     <button

@@ -26,9 +26,9 @@ const GuideBookings = () => {
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  const fetchBookings = useCallback(async () => {
+  const fetchBookings = useCallback(async (silent = false) => {
     if (!user) return;
-    setLoading(true);
+    if (!silent) setLoading(true);
     const { data, error } = await supabase
       .from("bookings")
       .select("*, traveler:profiles!bookings_traveler_id_fkey(id, name, profile_photo_url)")
@@ -43,6 +43,14 @@ const GuideBookings = () => {
   }, [user]);
 
   const updateBookingStatus = async (bookingId: string, action: "accept" | "decline") => {
+    if (action === "accept") {
+      const target = bookings.find((b) => b.id === bookingId);
+      const conflict = bookings.find((b) => b.id !== bookingId && b.status === "accepted" && b.date === target?.date);
+      if (conflict) {
+        toast.error(`You already have an accepted trip on ${new Date(target!.date).toLocaleDateString()}.`);
+        return;
+      }
+    }
     setActionLoading(bookingId);
     try {
       const status = action === "accept" ? "accepted" : "declined";
@@ -60,6 +68,19 @@ const GuideBookings = () => {
   useEffect(() => {
     fetchBookings();
   }, [fetchBookings]);
+
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase
+      .channel(`bookings-list-${user.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "bookings", filter: `guide_id=eq.${user.id}` }, () => {
+        fetchBookings(true);
+      })
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, fetchBookings]);
 
   const filtered = bookings.filter((b) => activeTab === "All" || b.status.toLowerCase() === activeTab.toLowerCase());
 

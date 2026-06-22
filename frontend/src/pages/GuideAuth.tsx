@@ -179,6 +179,14 @@ const GuideAuth = () => {
             </button>
           </form>
 
+          {!isLogin && (
+            <p className="text-center text-[11px] text-primary-foreground/50 mt-4">
+              By registering, you agree to our{" "}
+              <button onClick={() => navigate("/terms")} className="underline">Terms</button> and{" "}
+              <button onClick={() => navigate("/privacy")} className="underline">Privacy Policy</button>.
+            </p>
+          )}
+
           <p className="text-center text-sm text-primary-foreground/60 mt-5">
             {isLogin ? "New guide?" : "Already registered?"}{" "}
             <button onClick={() => { setIsLogin(!isLogin); reset(); }}

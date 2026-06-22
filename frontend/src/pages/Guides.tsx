@@ -78,7 +78,9 @@ const Guides = () => {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">
                   <h3 className="text-sm font-bold text-foreground truncate">{g.name}</h3>
-                  <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded-full font-bold">VERIFIED ✅</span>
+                  {g.is_verified && (
+                    <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded-full font-bold">VERIFIED ✅</span>
+                  )}
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
                   <MapPin size={10} /> {g.city || "India"}

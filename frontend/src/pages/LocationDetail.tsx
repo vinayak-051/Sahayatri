@@ -46,7 +46,7 @@ const LocationDetail = () => {
     setLoading(true);
     const { data, error } = await supabase
       .from("locations")
-      .select("*, guide:profiles!locations_guide_id_fkey(id, name, profile_photo_url, city, rating, bio, languages)")
+      .select("*, guide:profiles!locations_guide_id_fkey(id, name, profile_photo_url, city, rating, bio, languages, is_available)")
       .eq("id", id)
       .single();
 
@@ -84,6 +84,19 @@ const LocationDetail = () => {
   useEffect(() => {
     fetchLocation();
   }, [fetchLocation]);
+
+  useEffect(() => {
+    if (!user || !location) return;
+    const channel = supabase
+      .channel(`bookings-location-${user.id}-${location.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "bookings", filter: `traveler_id=eq.${user.id}` }, () => {
+        fetchMyRequest(location.guide_id, location.title);
+      })
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, location, fetchMyRequest]);
 
   const handleSave = async () => {
     if (!location) return;
@@ -136,14 +149,14 @@ const LocationDetail = () => {
     if (!user || !location || !requestDate) return;
     setRequesting(true);
     try {
-      const parsedAmount = parseInt(location.pricing?.replace(/[^0-9]/g, "") || "0", 10);
+      const totalAmount = (location.price_per_person ?? 0) * requestPeople;
       const { error } = await supabase.from("bookings").insert({
         traveler_id: user.id,
         guide_id: location.guide_id,
         destination: location.title,
         date: requestDate,
         people: requestPeople,
-        amount: parsedAmount || 0,
+        amount: totalAmount,
       });
       if (error) {
         toast.error(error.message || "Failed to request trip");
@@ -315,14 +328,16 @@ const LocationDetail = () => {
         <div className="flex gap-3 max-w-sm mx-auto">
           <button
             onClick={openRequestForm}
-            disabled={requesting || myRequestStatus === "pending" || myRequestStatus === "accepted"}
+            disabled={requesting || myRequestStatus === "pending" || myRequestStatus === "accepted" || location.guide?.is_available === false}
             className={`flex-1 py-3.5 rounded-2xl font-semibold text-sm active:scale-95 transition-transform disabled:opacity-60 ${
-              myRequestStatus === "pending" || myRequestStatus === "accepted"
+              myRequestStatus === "pending" || myRequestStatus === "accepted" || location.guide?.is_available === false
                 ? "bg-secondary text-muted-foreground"
                 : "gradient-primary text-primary-foreground shadow-glow"
             }`}
           >
-            {myRequestStatus === "pending"
+            {location.guide?.is_available === false
+              ? "Guide Not Available"
+              : myRequestStatus === "pending"
               ? "Requested"
               : myRequestStatus === "accepted"
               ? "Trip Accepted ✓"
@@ -373,8 +388,10 @@ const LocationDetail = () => {
                 </div>
 
                 <div className="flex items-center justify-between bg-white/5 rounded-xl px-4 py-3">
-                  <span className="text-xs text-white/60">Pricing</span>
-                  <span className="text-sm font-bold text-white">{location.pricing || "To be discussed with guide"}</span>
+                  <span className="text-xs text-white/60">Total ({requestPeople} {requestPeople === 1 ? "person" : "people"})</span>
+                  <span className="text-sm font-bold text-white">
+                    {location.price_per_person != null ? `₹${(location.price_per_person * requestPeople).toLocaleString()}` : "To be discussed with guide"}
+                  </span>
                 </div>
 
                 <button

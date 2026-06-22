@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Calendar, MapPin, CheckCircle2, XCircle, AlertCircle, MessageSquare } from "lucide-react";
+import { Calendar, MapPin, CheckCircle2, XCircle, AlertCircle, MessageSquare, Ban } from "lucide-react";
 import { toast } from "sonner";
 import BottomNav from "@/components/BottomNav";
 import { supabase } from "@/lib/supabaseClient";
@@ -34,6 +34,19 @@ const Trips = () => {
     fetchBookings();
   }, [fetchBookings]);
 
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase
+      .channel(`bookings-traveler-${user.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "bookings", filter: `traveler_id=eq.${user.id}` }, () => {
+        fetchBookings();
+      })
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, fetchBookings]);
+
   const handleFeedbackSubmit = async (bookingId: string, status: "completed" | "cancelled") => {
     setSubmittingFeedback(bookingId);
     const feedbackText = feedbackInput[bookingId] || "";
@@ -52,6 +65,23 @@ const Trips = () => {
 
   const isTripConcluded = (bookingDate: string) => new Date(bookingDate) < new Date();
 
+  const handleCancelBooking = (bookingId: string) => {
+    toast("Cancel this trip request?", {
+      action: {
+        label: "Cancel Trip",
+        onClick: async () => {
+          const { error } = await supabase.from("bookings").update({ status: "cancelled" }).eq("id", bookingId);
+          if (error) {
+            toast.error("Failed to cancel trip");
+            return;
+          }
+          toast.success("Trip cancelled");
+          fetchBookings();
+        },
+      },
+    });
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen gradient-sky flex items-center justify-center">
@@ -65,6 +95,7 @@ const Trips = () => {
   const completedTrips = bookings.filter((b) => b.status === "completed");
   const pendingApprovalTrips = bookings.filter((b) => b.status === "pending");
   const rejectedTrips = bookings.filter((b) => b.status === "declined");
+  const cancelledTrips = bookings.filter((b) => b.status === "cancelled");
 
   return (
     <div className="min-h-screen gradient-sky pb-28 text-foreground">
@@ -159,6 +190,14 @@ const Trips = () => {
                       <p className="text-xs font-extrabold text-foreground mt-0.5">{t.guide?.name}</p>
                     </div>
                   </div>
+                  <div className="px-4 pb-4">
+                    <button
+                      onClick={() => handleCancelBooking(t.id)}
+                      className="w-full py-2 rounded-xl bg-secondary border border-border text-xs font-medium text-destructive flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
+                    >
+                      <Ban size={12} /> Cancel Trip
+                    </button>
+                  </div>
                 </motion.div>
               ))}
             </div>
@@ -211,9 +250,10 @@ const Trips = () => {
                       <p className="text-[10px] text-muted-foreground mt-0.5">Booking with {t.guide?.name}</p>
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right flex flex-col items-end gap-1.5">
                     <span className="text-[8px] bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">Requested</span>
-                    <p className="text-[10px] text-muted-foreground mt-1.5 font-bold">₹{t.amount}</p>
+                    <p className="text-[10px] text-muted-foreground font-bold">₹{t.amount}</p>
+                    <button onClick={() => handleCancelBooking(t.id)} className="text-[10px] font-bold text-destructive">Cancel</button>
                   </div>
                 </div>
               ))}
@@ -235,6 +275,26 @@ const Trips = () => {
                     </div>
                   </div>
                   <span className="text-[8px] bg-destructive/10 text-destructive border border-destructive/20 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">Rejected</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {cancelledTrips.length > 0 && (
+          <div className="space-y-3">
+            <h2 className="text-xs font-extrabold text-muted-foreground uppercase tracking-wider">Cancelled</h2>
+            <div className="space-y-3">
+              {cancelledTrips.map((t) => (
+                <div key={t.id} className="glass rounded-3xl p-4 shadow-card border border-border flex items-center justify-between opacity-60">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-secondary rounded-2xl flex items-center justify-center text-xl">🚫</div>
+                    <div>
+                      <h3 className="text-xs font-bold text-foreground">{t.destination} Spot</h3>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">Cancelled • was with {t.guide?.name}</p>
+                    </div>
+                  </div>
+                  <span className="text-[8px] bg-secondary text-muted-foreground px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">Cancelled</span>
                 </div>
               ))}
             </div>

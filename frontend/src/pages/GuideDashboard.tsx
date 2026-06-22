@@ -15,9 +15,9 @@ const GuideDashboard = () => {
   const [avgRating, setAvgRating] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (silent = false) => {
     if (!user) return;
-    setLoading(true);
+    if (!silent) setLoading(true);
     const [{ data: bookingsData }, { data: ratingData }] = await Promise.all([
       supabase
         .from("bookings")
@@ -35,8 +35,29 @@ const GuideDashboard = () => {
     fetchData();
   }, [fetchData]);
 
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase
+      .channel(`bookings-guide-${user.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "bookings", filter: `guide_id=eq.${user.id}` }, () => {
+        fetchData(true);
+      })
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, fetchData]);
+
   const handleBookingAction = async (id: string, action: "accept" | "decline") => {
     const status = action === "accept" ? "accepted" : "declined";
+    if (action === "accept") {
+      const target = bookings.find((b) => b.id === id);
+      const conflict = bookings.find((b) => b.id !== id && b.status === "accepted" && b.date === target?.date);
+      if (conflict) {
+        toast.error(`You already have an accepted trip on ${new Date(target!.date).toLocaleDateString()}.`);
+        return;
+      }
+    }
     const { error } = await supabase.from("bookings").update({ status }).eq("id", id);
     if (error) {
       toast.error("Error updating booking");

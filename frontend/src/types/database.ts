@@ -24,6 +24,7 @@ export interface Profile {
   rating: number;
   rate_per_day: number | null;
   is_available: boolean;
+  is_verified: boolean;
   onboarded: boolean;
   created_at: string;
 }
@@ -39,6 +40,7 @@ export interface Location {
   tags: string[];
   best_visiting_time: string | null;
   pricing: string | null;
+  price_per_person: number | null;
   timings: string | null;
   safety_level: SafetyLevel;
   difficulty: Difficulty;
@@ -52,7 +54,7 @@ export interface Location {
   views_count: number;
   created_at: string;
   updated_at: string;
-  guide?: Pick<Profile, "id" | "name" | "profile_photo_url" | "city" | "rating">;
+  guide?: Pick<Profile, "id" | "name" | "profile_photo_url" | "city" | "rating" | "is_available">;
 }
 
 export interface Booking {

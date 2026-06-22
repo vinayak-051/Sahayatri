@@ -1,11 +1,17 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, Plus, MapPin, DollarSign, Users, Calendar, X, MessageCircle, Trash2 } from "lucide-react";
+import { ArrowLeft, Plus, MapPin, DollarSign, Users, Calendar, X, MessageCircle, Trash2, Check } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/context/AuthContext";
 import type { BuddyTrip } from "@/types/database";
+
+interface JoinRequest {
+  id: string;
+  traveler_id: string;
+  traveler_name: string;
+}
 
 const TravelBuddy = () => {
   const navigate = useNavigate();
@@ -13,6 +19,7 @@ const TravelBuddy = () => {
   const [trips, setTrips] = useState<BuddyTrip[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [joinRequests, setJoinRequests] = useState<Record<string, JoinRequest[]>>({});
 
   const [destination, setDestination] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -20,6 +27,31 @@ const TravelBuddy = () => {
   const [budget, setBudget] = useState("");
   const [description, setDescription] = useState("");
   const [creating, setCreating] = useState(false);
+
+  const fetchJoinRequests = useCallback(async (myTripIds: string[]) => {
+    if (myTripIds.length === 0) {
+      setJoinRequests({});
+      return;
+    }
+    const { data, error } = await supabase
+      .from("buddy_requests")
+      .select("id, trip_id, traveler:profiles!buddy_requests_traveler_id_fkey(id, name)")
+      .in("trip_id", myTripIds)
+      .eq("status", "pending");
+    if (error) {
+      console.error("Failed to fetch join requests:", error.message);
+      return;
+    }
+    const grouped: Record<string, JoinRequest[]> = {};
+    for (const r of data ?? []) {
+      const traveler = r.traveler as unknown as { id: string; name: string } | { id: string; name: string }[] | null;
+      const t = Array.isArray(traveler) ? traveler[0] : traveler;
+      if (!t) continue;
+      grouped[r.trip_id] = grouped[r.trip_id] || [];
+      grouped[r.trip_id].push({ id: r.id, traveler_id: t.id, traveler_name: t.name });
+    }
+    setJoinRequests(grouped);
+  }, []);
 
   const fetchTrips = useCallback(async () => {
     setLoading(true);
@@ -35,14 +67,26 @@ const TravelBuddy = () => {
     if (error) {
       console.error("Failed to fetch trips:", error.message);
     } else {
-      setTrips((data ?? []) as BuddyTrip[]);
+      const tripsData = (data ?? []) as BuddyTrip[];
+      setTrips(tripsData);
+      if (user) await fetchJoinRequests(tripsData.filter((t) => t.user_id === user.id).map((t) => t.id));
     }
     setLoading(false);
-  }, []);
+  }, [user, fetchJoinRequests]);
 
   useEffect(() => {
     fetchTrips();
   }, [fetchTrips]);
+
+  const handleRequestAction = async (requestId: string, tripId: string, action: "accepted" | "rejected") => {
+    const { error } = await supabase.from("buddy_requests").update({ status: action }).eq("id", requestId);
+    if (error) {
+      toast.error("Failed to update request");
+      return;
+    }
+    setJoinRequests((prev) => ({ ...prev, [tripId]: (prev[tripId] || []).filter((r) => r.id !== requestId) }));
+    toast.success(action === "accepted" ? "Request accepted!" : "Request rejected");
+  };
 
   const handleDeleteTrip = async (tripId: string) => {
     const { error } = await supabase.from("buddy_trips").delete().eq("id", tripId);
@@ -161,7 +205,6 @@ const TravelBuddy = () => {
                         )}
                       </div>
                     </div>
-                    <p className="text-[10px] text-muted-foreground">verified traveler ✅</p>
                   </div>
                 </div>
 
@@ -207,6 +250,31 @@ const TravelBuddy = () => {
                     </div>
                   )}
                 </div>
+
+                {t.user_id === user?.id && (joinRequests[t.id]?.length ?? 0) > 0 && (
+                  <div className="mt-3 pt-3 border-t border-border/50 space-y-2">
+                    <p className="text-[9px] text-muted-foreground uppercase font-bold tracking-wider">Join Requests</p>
+                    {joinRequests[t.id].map((r) => (
+                      <div key={r.id} className="flex items-center justify-between bg-secondary/30 rounded-xl px-3 py-2">
+                        <span className="text-xs font-semibold text-foreground">{r.traveler_name}</span>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => handleRequestAction(r.id, t.id, "accepted")}
+                            className="p-1.5 rounded-lg bg-primary/10 text-primary active:scale-90 transition-transform"
+                          >
+                            <Check size={13} />
+                          </button>
+                          <button
+                            onClick={() => handleRequestAction(r.id, t.id, "rejected")}
+                            className="p-1.5 rounded-lg bg-destructive/10 text-destructive active:scale-90 transition-transform"
+                          >
+                            <X size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </motion.div>
             ))
           ) : (

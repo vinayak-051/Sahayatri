@@ -25,8 +25,16 @@ backend/    SQL migrations + a Node seed script (uses the Supabase service-role 
    [`backend/migrations/0001_init.sql`](backend/migrations/0001_init.sql), and run it.
    This creates every table, Row Level Security policy, the `profiles` auto-creation
    trigger, the two Storage buckets (`avatars`, `location-media`), and enables Realtime
-   on the `messages` table.
-3. (Optional, for "Continue with Google") In **Authentication → Providers**, enable
+   on the `messages` table. Then run `0002_sync_guide_rating.sql`, `0003_guide_rate.sql`,
+   `0004_unique_email.sql`, and `0005_real_time_fixes.sql` in that order (each is a small,
+   focused follow-up — see the comment at the top of each file for what it does and any
+   manual steps required before running it, e.g. `0004` needs existing duplicate emails
+   resolved first).
+3. New guides start with `is_verified = false` and show no "Verified" badge anywhere in
+   the app. There's no admin UI for this yet — once you've actually verified a guide's
+   identity, flip their row's `is_verified` to `true` directly in **Table Editor →
+   profiles**.
+4. (Optional, for "Continue with Google") In **Authentication → Providers**, enable
    Google and paste your own OAuth client ID/secret from
    [Google Cloud Console](https://console.cloud.google.com/apis/credentials). Add
    `http://localhost:8000` to your app's authorized redirect origins as needed.
@@ -86,6 +94,15 @@ npm run dev
 Open **http://localhost:8000** and log in with any seeded email above (e.g.
 `vinayak.traveler@sahayatri.dev` as a traveler, or `guide.jaipur@sahayatri.dev` as a
 guide) and the password above.
+
+## Staging vs. production
+
+There is currently only **one** Supabase project, used for both local development and
+whatever you consider "production." Before any real users sign up, create a **second
+Supabase project** for production and re-run the migrations there (`0001`–`0005`) —
+keep development/demo data in the original project entirely separate from real user
+data. Point `frontend/.env.local` (or your deploy host's env vars) and `backend/.env` at
+whichever project you mean to target; the two projects don't need to share anything.
 
 ## Testing
 
