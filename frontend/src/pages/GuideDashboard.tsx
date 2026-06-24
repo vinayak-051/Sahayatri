@@ -6,11 +6,13 @@ import { toast } from "sonner";
 import GuideBottomNav from "@/components/GuideBottomNav";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/context/AuthContext";
+import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
 import type { Booking } from "@/types/database";
 
 const GuideDashboard = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const unreadCount = useUnreadNotifications();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [avgRating, setAvgRating] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -91,9 +93,9 @@ const GuideDashboard = () => {
         <div className="flex items-center gap-3">
           <button onClick={() => navigate("/notifications")} className="relative w-10 h-10 rounded-xl glass flex items-center justify-center shadow-card">
             <Bell size={20} />
-            {pendingBookings.length > 0 && (
+            {unreadCount > 0 && (
               <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full gradient-accent text-[10px] text-accent-foreground font-bold flex items-center justify-center">
-                {pendingBookings.length}
+                {unreadCount}
               </span>
             )}
           </button>

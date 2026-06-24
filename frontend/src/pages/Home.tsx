@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import BottomNav from "@/components/BottomNav";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/context/AuthContext";
+import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
 import type { Profile, BuddyTrip, Location } from "@/types/database";
 import heroImg from "@/assets/hero-travel.jpg";
 import logo from "@/assets/logo.png";
@@ -25,6 +26,7 @@ interface SearchResults {
 const Home = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const unreadCount = useUnreadNotifications();
   const [topLocations, setTopLocations] = useState<Location[]>([]);
 
   useEffect(() => {
@@ -74,6 +76,11 @@ const Home = () => {
           className="absolute top-6 right-6 z-20 p-2.5 glass rounded-full shadow-card active:scale-95 transition-transform"
         >
           <Bell size={18} className="text-primary-foreground" />
+          {unreadCount > 0 && (
+            <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full gradient-accent text-[10px] text-accent-foreground font-bold flex items-center justify-center">
+              {unreadCount}
+            </span>
+          )}
         </button>
         <div className="relative z-10 flex flex-col justify-end h-full px-6 pb-8">
           <motion.p initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="text-primary-foreground/80 text-sm font-light">

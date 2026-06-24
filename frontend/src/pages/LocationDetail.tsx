@@ -5,12 +5,12 @@ import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/context/AuthContext";
-import type { Location, BuddyTrip, BookingStatus } from "@/types/database";
+import type { Location, BuddyTrip, BookingStatus, LocationReview } from "@/types/database";
 
 const LocationDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, isGuide } = useAuth();
   const [location, setLocation] = useState<Location | null>(null);
   const [otherListings, setOtherListings] = useState<Location[]>([]);
   const [buddies, setBuddies] = useState<BuddyTrip[]>([]);
@@ -26,6 +26,12 @@ const LocationDetail = () => {
   const [requestPeople, setRequestPeople] = useState(1);
   const [requesting, setRequesting] = useState(false);
   const [myRequestStatus, setMyRequestStatus] = useState<BookingStatus | null>(null);
+  const [reviews, setReviews] = useState<LocationReview[]>([]);
+  const [showReviewForm, setShowReviewForm] = useState(false);
+  const [myRating, setMyRating] = useState(0);
+  const [hoverRating, setHoverRating] = useState(0);
+  const [myComment, setMyComment] = useState("");
+  const [submittingReview, setSubmittingReview] = useState(false);
 
   const fetchMyRequest = useCallback(async (guideId: string, destination: string) => {
     if (!user) return;
@@ -84,6 +90,45 @@ const LocationDetail = () => {
   useEffect(() => {
     fetchLocation();
   }, [fetchLocation]);
+
+  const fetchReviews = useCallback(async () => {
+    if (!id) return;
+    const { data, error } = await supabase
+      .from("location_reviews")
+      .select("*, reviewer:profiles!location_reviews_reviewer_id_fkey(id, name, role, profile_photo_url)")
+      .eq("location_id", id)
+      .order("created_at", { ascending: false });
+    if (!error) setReviews((data ?? []) as LocationReview[]);
+  }, [id]);
+
+  useEffect(() => {
+    fetchReviews();
+  }, [fetchReviews]);
+
+  const submitReview = async () => {
+    if (!myRating || !myComment.trim() || !id || !user) return;
+    setSubmittingReview(true);
+    try {
+      const { error } = await supabase
+        .from("location_reviews")
+        .insert({ location_id: id, reviewer_id: user.id, rating: myRating, comment: myComment.trim() });
+      if (error) {
+        if (error.code === "23505") {
+          toast.error("You've already reviewed this spot.");
+        } else {
+          toast.error(error.message);
+        }
+        return;
+      }
+      setShowReviewForm(false);
+      setMyRating(0);
+      setMyComment("");
+      fetchReviews();
+      toast.success("Review submitted!");
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
 
   useEffect(() => {
     if (!user || !location) return;
@@ -302,6 +347,107 @@ const LocationDetail = () => {
             </div>
           ) : (
             <div className="glass rounded-2xl py-6 text-center opacity-40 text-xs">No other guides offer this spot yet</div>
+          )}
+        </div>
+
+        <div className="glass rounded-2xl p-5 shadow-card mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-sm font-semibold text-foreground">Reviews</h3>
+              <p className="text-[10px] text-muted-foreground mt-0.5">{reviews.length} from Sahayatri verified users</p>
+            </div>
+            {user && !isGuide && (
+              <button
+                onClick={() => setShowReviewForm((v) => !v)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl gradient-primary text-white text-[10px] font-bold active:scale-95 transition-transform"
+              >
+                <Star size={10} /> Write Review
+              </button>
+            )}
+          </div>
+
+          <AnimatePresence>
+            {showReviewForm && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden mb-4"
+              >
+                <div className="bg-primary/5 border border-primary/10 rounded-2xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold text-foreground">Your Rating</p>
+                    <button onClick={() => setShowReviewForm(false)}><X size={14} className="text-muted-foreground" /></button>
+                  </div>
+                  <div className="flex gap-2">
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <button
+                        key={n}
+                        onMouseEnter={() => setHoverRating(n)}
+                        onMouseLeave={() => setHoverRating(0)}
+                        onClick={() => setMyRating(n)}
+                        className="transition-transform active:scale-110"
+                      >
+                        <Star
+                          size={24}
+                          className={`transition-colors ${
+                            n <= (hoverRating || myRating) ? "text-accent fill-accent" : "text-muted-foreground"
+                          }`}
+                        />
+                      </button>
+                    ))}
+                  </div>
+                  <textarea
+                    value={myComment}
+                    onChange={(e) => setMyComment(e.target.value)}
+                    rows={3}
+                    placeholder="Share your experience at this spot..."
+                    className="w-full bg-background/60 border border-primary/10 rounded-xl px-3 py-2.5 text-xs text-foreground placeholder:text-muted-foreground outline-none resize-none"
+                  />
+                  <button
+                    onClick={submitReview}
+                    disabled={!myRating || !myComment.trim() || submittingReview}
+                    className="w-full py-2.5 rounded-xl gradient-primary text-white text-xs font-bold flex items-center justify-center gap-2 disabled:opacity-40 active:scale-95 transition-transform"
+                  >
+                    {submittingReview ? <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" /> : <Send size={12} />}
+                    Submit Review
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {reviews.length === 0 ? (
+            <div className="text-center py-8 opacity-40">
+              <div className="text-3xl mb-2">⭐</div>
+              <p className="text-xs">No reviews yet. Be the first to review!</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {reviews.map((r, i) => (
+                <div key={r.id} className={`${i > 0 ? "pt-4 border-t border-border" : ""}`}>
+                  <div className="flex items-start justify-between gap-2 mb-1.5">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full gradient-primary flex items-center justify-center text-white text-xs font-bold">
+                        {r.reviewer?.name?.[0]?.toUpperCase()}
+                      </div>
+                      <div>
+                        <span className="text-xs font-semibold text-foreground">{r.reviewer?.name}</span>
+                        <div className="flex mt-0.5">
+                          {Array.from({ length: 5 }).map((_, j) => (
+                            <Star key={j} size={9} className={j < r.rating ? "text-accent fill-accent" : "text-muted-foreground/30"} />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <span className="text-[8px] text-muted-foreground whitespace-nowrap">
+                      {new Date(r.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed pl-10">{r.comment}</p>
+                </div>
+              ))}
+            </div>
           )}
         </div>
 

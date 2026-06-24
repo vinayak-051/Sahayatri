@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -16,8 +16,13 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>;
 
 const ForgotPassword = () => {
+  const [searchParams] = useSearchParams();
+  const role = searchParams.get("role") === "guide" ? "guide" : "traveler";
+  const authPath = role === "guide" ? "/guide-auth" : "/auth";
+
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
+  const [notFound, setNotFound] = useState(false);
 
   const {
     register,
@@ -28,6 +33,18 @@ const ForgotPassword = () => {
   const onSubmit = async ({ email }: FormValues) => {
     setLoading(true);
     try {
+      const { data: existing } = await supabase
+        .from("profiles")
+        .select("id")
+        .ilike("email", email)
+        .eq("role", role)
+        .maybeSingle();
+
+      if (!existing) {
+        setNotFound(true);
+        return;
+      }
+
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/reset-password`,
       });
@@ -68,9 +85,26 @@ const ForgotPassword = () => {
           </div>
 
           <div className="glass rounded-3xl p-6 space-y-4">
-            {sent ? (
+            {notFound ? (
+              <div className="text-center space-y-3">
+                <p className="text-sm text-foreground">No account found for that email.</p>
+                <Link
+                  to="/auth"
+                  className="inline-block w-full py-3 rounded-xl gradient-primary text-primary-foreground font-semibold text-sm"
+                >
+                  Create an account
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setNotFound(false)}
+                  className="text-xs text-muted-foreground underline"
+                >
+                  Try a different email
+                </button>
+              </div>
+            ) : sent ? (
               <p className="text-sm text-center text-foreground">
-                If an account exists for that email, a reset link is on its way. Check your inbox.
+                A reset link has been sent. Check your inbox.
               </p>
             ) : (
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">

@@ -9,6 +9,7 @@ export type Difficulty = "easy" | "moderate" | "hard";
 export type BookingStatus = "pending" | "accepted" | "declined" | "completed" | "cancelled";
 export type BuddyRequestStatus = "pending" | "accepted" | "rejected";
 export type ReportStatus = "open" | "reviewed" | "dismissed";
+export type NotificationType = "booking_requested" | "booking_accepted" | "booking_declined" | "booking_cancelled" | "new_message";
 
 export interface Profile {
   id: string;
@@ -111,6 +112,16 @@ export interface Review {
   reviewer?: Pick<Profile, "id" | "name" | "role" | "profile_photo_url">;
 }
 
+export interface LocationReview {
+  id: string;
+  location_id: string;
+  reviewer_id: string;
+  rating: number;
+  comment: string;
+  created_at: string;
+  reviewer?: Pick<Profile, "id" | "name" | "role" | "profile_photo_url">;
+}
+
 export interface Report {
   id: string;
   location_id: string;
@@ -125,4 +136,16 @@ export interface GuideRatingStats {
   guide_id: string;
   reviews_count: number;
   avg_rating: number;
+}
+
+// Named AppNotification to avoid colliding with the DOM Notification type.
+export interface AppNotification {
+  id: string;
+  user_id: string;
+  type: NotificationType;
+  title: string;
+  body: string;
+  data: Record<string, unknown>;
+  is_read: boolean;
+  created_at: string;
 }

@@ -149,7 +149,7 @@ const GuideAuth = () => {
               <div className="text-right">
                 <button
                   type="button"
-                  onClick={() => navigate("/forgot-password")}
+                  onClick={() => navigate("/forgot-password?role=guide")}
                   className="text-xs text-primary-foreground/70 hover:text-accent transition-colors"
                 >
                   Forgot password?

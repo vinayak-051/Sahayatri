@@ -1,69 +1,61 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Bell, Calendar, Check } from "lucide-react";
+import { ArrowLeft, Bell, Calendar, Check, X, MessageCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/context/AuthContext";
+import type { AppNotification, NotificationType } from "@/types/database";
 
-interface Notification {
-  id: string;
-  icon: typeof Calendar;
-  color: string;
-  title: string;
-  desc: string;
-  time: string;
-}
+const ICONS: Record<NotificationType, { icon: typeof Calendar; color: string }> = {
+  booking_requested: { icon: Calendar, color: "gradient-accent" },
+  booking_accepted: { icon: Check, color: "gradient-primary" },
+  booking_declined: { icon: X, color: "bg-destructive" },
+  booking_cancelled: { icon: X, color: "bg-destructive" },
+  new_message: { icon: MessageCircle, color: "gradient-primary" },
+};
 
 const Notifications = () => {
   const navigate = useNavigate();
-  const { user, isGuide } = useAuth();
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const { user } = useAuth();
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchNotifications = useCallback(async () => {
     if (!user) return;
     setLoading(true);
-    if (isGuide) {
-      const { data } = await supabase
-        .from("bookings")
-        .select("*, traveler:profiles!bookings_traveler_id_fkey(name)")
-        .eq("guide_id", user.id)
-        .eq("status", "pending")
-        .order("created_at", { ascending: false });
-      setNotifications(
-        (data ?? []).map((b) => ({
-          id: b.id,
-          icon: Calendar,
-          color: "gradient-accent",
-          title: "New booking request",
-          desc: `${b.traveler?.name || "A traveler"} requested a trip to ${b.destination}`,
-          time: new Date(b.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" }),
-        }))
-      );
-    } else {
-      const { data } = await supabase
-        .from("bookings")
-        .select("*, guide:profiles!bookings_guide_id_fkey(name)")
-        .eq("traveler_id", user.id)
-        .eq("status", "accepted")
-        .order("created_at", { ascending: false });
-      setNotifications(
-        (data ?? []).map((b) => ({
-          id: b.id,
-          icon: Check,
-          color: "gradient-primary",
-          title: "Booking confirmed",
-          desc: `${b.guide?.name || "Your guide"} accepted your trip to ${b.destination}`,
-          time: new Date(b.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" }),
-        }))
-      );
-    }
+    const { data } = await supabase
+      .from("notifications")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false });
+    setNotifications((data ?? []) as AppNotification[]);
     setLoading(false);
-  }, [user, isGuide]);
+
+    const unreadIds = (data ?? []).filter((n) => !n.is_read).map((n) => n.id);
+    if (unreadIds.length > 0) {
+      await supabase.from("notifications").update({ is_read: true }).in("id", unreadIds);
+    }
+  }, [user]);
 
   useEffect(() => {
     fetchNotifications();
   }, [fetchNotifications]);
+
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase
+      .channel(`notifications-feed-${user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${user.id}` },
+        (payload) => setNotifications((prev) => [payload.new as AppNotification, ...prev])
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
 
   return (
     <div className="min-h-screen gradient-sky pb-20">
@@ -78,24 +70,29 @@ const Notifications = () => {
             <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
           </div>
         ) : notifications.length > 0 ? (
-          notifications.map((n, i) => (
-            <motion.div
-              key={n.id}
-              initial={{ x: -20, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              transition={{ delay: i * 0.05 }}
-              className="glass rounded-2xl p-4 shadow-card flex items-start gap-3"
-            >
-              <div className={`w-10 h-10 rounded-xl ${n.color} flex items-center justify-center flex-shrink-0 mt-0.5`}>
-                <n.icon size={16} className="text-primary-foreground" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-sm font-semibold text-foreground">{n.title}</h3>
-                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{n.desc}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">{n.time}</p>
-              </div>
-            </motion.div>
-          ))
+          notifications.map((n, i) => {
+            const { icon: Icon, color } = ICONS[n.type] ?? { icon: Bell, color: "gradient-primary" };
+            return (
+              <motion.div
+                key={n.id}
+                initial={{ x: -20, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                transition={{ delay: i * 0.05 }}
+                className="glass rounded-2xl p-4 shadow-card flex items-start gap-3"
+              >
+                <div className={`w-10 h-10 rounded-xl ${color} flex items-center justify-center flex-shrink-0 mt-0.5`}>
+                  <Icon size={16} className="text-primary-foreground" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-semibold text-foreground">{n.title}</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{n.body}</p>
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    {new Date(n.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                  </p>
+                </div>
+              </motion.div>
+            );
+          })
         ) : (
           <div className="text-center py-20 opacity-50">
             <Bell size={40} className="mx-auto mb-4 text-muted-foreground" />

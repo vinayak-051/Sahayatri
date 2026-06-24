@@ -29,6 +29,7 @@ const ResetPassword = () => {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [hasRecoverySession, setHasRecoverySession] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const {
@@ -38,6 +39,16 @@ const ResetPassword = () => {
   } = useForm<FormValues>({ resolver: zodResolver(schema) });
 
   useEffect(() => {
+    // A rejected/expired/already-used recovery link redirects back here with
+    // ?error=...&error_description=... (no session ever gets created), so
+    // surface that instead of a generic message.
+    const params = new URLSearchParams(window.location.hash.replace(/^#/, "") || window.location.search);
+    const description = params.get("error_description");
+    if (description) {
+      setLinkError(decodeURIComponent(description.replace(/\+/g, " ")));
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+
     // Supabase's password-recovery email link establishes a temporary session
     // and fires this auth event once the redirect lands back in the app.
     const { data: listener } = supabase.auth.onAuthStateChange((event) => {
@@ -86,7 +97,8 @@ const ResetPassword = () => {
           <div className="glass rounded-3xl p-6 space-y-4">
             {!hasRecoverySession ? (
               <p className="text-sm text-center text-foreground">
-                This link is invalid or has expired. Request a new reset link from the sign-in page.
+                {linkError || "This link is invalid or has expired."} Request a new reset link from the
+                sign-in page — only the most recently requested email works, and links are single-use.
               </p>
             ) : (
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">

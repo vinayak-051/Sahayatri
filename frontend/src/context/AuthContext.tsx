@@ -1,7 +1,9 @@
 import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import type { Session } from "@supabase/supabase-js";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
+import { subscribeToPush } from "@/lib/push";
 import type { Profile, Role } from "@/types/database";
 
 interface RegisterParams {
@@ -34,6 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const navigate = useNavigate();
 
   const fetchProfile = useCallback(async (userId: string) => {
     const { data, error } = await supabase.from("profiles").select("*").eq("id", userId).single();
@@ -70,7 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+    const { data: listener } = supabase.auth.onAuthStateChange(async (event, newSession) => {
       setSession(newSession);
       if (newSession?.user) {
         await fetchProfile(newSession.user.id);
@@ -78,13 +81,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
       }
       setIsLoading(false);
+      // A recovery link can land anywhere (e.g. Supabase dashboard's manual
+      // "send recovery email" ignores our resetPasswordForEmail redirectTo
+      // and falls back to the project's Site URL, usually "/"), so force the
+      // user to the actual reset form instead of wherever the link redirected.
+      if (event === "PASSWORD_RECOVERY") navigate("/reset-password");
     });
 
     return () => {
       mounted = false;
       listener.subscription.unsubscribe();
     };
-  }, [fetchProfile]);
+  }, [fetchProfile, navigate]);
 
   const login = async (email: string, password: string, expectedRole?: Role) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
@@ -145,6 +153,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshProfile = async () => {
     if (session?.user) await fetchProfile(session.user.id);
   };
+
+  useEffect(() => {
+    if (user) subscribeToPush(user.id);
+  }, [user?.id]);
 
   return (
     <AuthContext.Provider
