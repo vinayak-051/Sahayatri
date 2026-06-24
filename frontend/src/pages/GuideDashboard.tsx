@@ -72,7 +72,8 @@ const GuideDashboard = () => {
   const pendingBookings = bookings.filter((b) => b.status === "pending");
   const acceptedBookings = bookings.filter((b) => b.status === "accepted");
   const completedOrAccepted = bookings.filter((b) => b.status === "accepted" || b.status === "completed");
-  const totalEarnings = completedOrAccepted.reduce((sum, b) => sum + Number(b.amount || 0), 0);
+  const completedBookings = bookings.filter((b) => b.status === "completed");
+  const totalEarnings = completedBookings.reduce((sum, b) => sum + Number(b.amount || 0), 0);
 
   const statCards = [
     { icon: Users, label: "Tourists Served", value: String(completedOrAccepted.length), color: "gradient-primary" },

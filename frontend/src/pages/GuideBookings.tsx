@@ -91,7 +91,7 @@ const GuideBookings = () => {
           <h1 className="text-xl font-bold text-foreground">My Bookings</h1>
           <p className="text-sm text-muted-foreground mt-1">Requests from verified travelers</p>
         </div>
-        <button onClick={fetchBookings} className="w-10 h-10 rounded-2xl glass flex items-center justify-center border border-primary/10 active:scale-95 transition-transform">
+        <button onClick={() => fetchBookings()} className="w-10 h-10 rounded-2xl glass flex items-center justify-center border border-primary/10 active:scale-95 transition-transform">
           <RefreshCw size={16} className={`text-primary ${loading ? "animate-spin" : ""}`} />
         </button>
       </div>

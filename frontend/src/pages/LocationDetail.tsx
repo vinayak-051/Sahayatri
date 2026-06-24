@@ -84,7 +84,13 @@ const LocationDetail = () => {
     setLoading(false);
 
     // best-effort view counter
-    supabase.from("locations").update({ views_count: ((data as Location).views_count || 0) + 1 }).eq("id", id);
+    supabase
+      .from("locations")
+      .update({ views_count: ((data as Location).views_count || 0) + 1 })
+      .eq("id", id)
+      .then(({ error: viewCountError }) => {
+        if (viewCountError) console.error("Failed to update view count:", viewCountError.message);
+      });
   }, [id, fetchMyRequest]);
 
   useEffect(() => {
