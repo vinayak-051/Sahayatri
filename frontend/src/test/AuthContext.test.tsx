@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { BrowserRouter } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 
 const mockGetSession = vi.fn();
@@ -64,9 +65,11 @@ describe("AuthContext", () => {
     mockGetSession.mockResolvedValue({ data: { session: null } });
 
     render(
-      <AuthProvider>
-        <Consumer />
-      </AuthProvider>
+      <BrowserRouter>
+        <AuthProvider>
+          <Consumer />
+        </AuthProvider>
+      </BrowserRouter>
     );
 
     await waitFor(() => expect(screen.getByText("signed-out")).toBeInTheDocument());
@@ -82,9 +85,11 @@ describe("AuthContext", () => {
     });
 
     render(
-      <AuthProvider>
-        <Consumer />
-      </AuthProvider>
+      <BrowserRouter>
+        <AuthProvider>
+          <Consumer />
+        </AuthProvider>
+      </BrowserRouter>
     );
 
     await waitFor(() => expect(screen.getByText("signed-in:Test Traveler")).toBeInTheDocument());
@@ -96,9 +101,11 @@ describe("AuthContext", () => {
     mockSingle.mockResolvedValue({ data: { role: "guide" }, error: null });
 
     render(
-      <AuthProvider>
-        <LoginTester />
-      </AuthProvider>
+      <BrowserRouter>
+        <AuthProvider>
+          <LoginTester />
+        </AuthProvider>
+      </BrowserRouter>
     );
 
     fireEvent.click(screen.getByText("Login"));
@@ -113,9 +120,11 @@ describe("AuthContext", () => {
     mockSingle.mockResolvedValue({ data: { role: "traveler" }, error: null });
 
     render(
-      <AuthProvider>
-        <LoginTester />
-      </AuthProvider>
+      <BrowserRouter>
+        <AuthProvider>
+          <LoginTester />
+        </AuthProvider>
+      </BrowserRouter>
     );
 
     fireEvent.click(screen.getByText("Login"));
