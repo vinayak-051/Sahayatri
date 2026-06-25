@@ -13,7 +13,11 @@ const Guides = () => {
 
   const fetchGuides = async (name = "") => {
     setLoading(true);
-    let query = supabase.from("profiles").select("*").eq("role", "guide").order("name", { ascending: true });
+    let query = supabase
+      .from("profiles")
+      .select("id, name, profile_photo_url, is_verified, city, rating, languages, rate_per_day")
+      .eq("role", "guide")
+      .order("name", { ascending: true });
     if (name) query = query.ilike("name", `%${name}%`);
     const { data, error } = await query;
     if (error) {

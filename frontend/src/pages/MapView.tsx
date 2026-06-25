@@ -55,8 +55,8 @@ const MapView = () => {
   useEffect(() => {
     const load = async () => {
       const [{ data: locs }, { data: gds }] = await Promise.all([
-        supabase.from("locations").select("*").eq("status", "active"),
-        supabase.from("profiles").select("*").eq("role", "guide"),
+        supabase.from("locations").select("id, title, lat, lng, rating").eq("status", "active"),
+        supabase.from("profiles").select("id, name, city, rating").eq("role", "guide"),
       ]);
       setLocations((locs ?? []) as Location[]);
       setGuides((gds ?? []) as Profile[]);

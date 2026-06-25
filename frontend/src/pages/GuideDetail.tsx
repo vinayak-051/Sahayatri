@@ -28,7 +28,12 @@ const GuideDetail = () => {
     if (!id) return;
     const fetchGuide = async () => {
       setLoading(true);
-      const { data, error } = await supabase.from("profiles").select("*").eq("id", id).eq("role", "guide").single();
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, name, profile_photo_url, city, rating, is_verified, bio, specialization, languages, rate_per_day, additional_cities, is_available")
+        .eq("id", id)
+        .eq("role", "guide")
+        .single();
       if (error) {
         console.error("Failed to fetch guide:", error.message);
         setGuide(null);

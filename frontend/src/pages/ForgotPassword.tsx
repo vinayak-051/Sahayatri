@@ -4,7 +4,6 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { toast } from "sonner";
 import { Mail, ArrowLeft } from "lucide-react";
 import heroImg from "@/assets/hero-travel.jpg";
 import { supabase } from "@/lib/supabaseClient";
@@ -22,7 +21,6 @@ const ForgotPassword = () => {
 
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
-  const [notFound, setNotFound] = useState(false);
 
   const {
     register,
@@ -33,25 +31,9 @@ const ForgotPassword = () => {
   const onSubmit = async ({ email }: FormValues) => {
     setLoading(true);
     try {
-      const { data: existing } = await supabase
-        .from("profiles")
-        .select("id")
-        .ilike("email", email)
-        .eq("role", role)
-        .maybeSingle();
-
-      if (!existing) {
-        setNotFound(true);
-        return;
-      }
-
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/reset-password`,
       });
-      if (error) {
-        toast.error(error.message);
-        return;
-      }
       setSent(true);
     } finally {
       setLoading(false);
@@ -85,26 +67,9 @@ const ForgotPassword = () => {
           </div>
 
           <div className="glass rounded-3xl p-6 space-y-4">
-            {notFound ? (
-              <div className="text-center space-y-3">
-                <p className="text-sm text-foreground">No account found for that email.</p>
-                <Link
-                  to="/auth"
-                  className="inline-block w-full py-3 rounded-xl gradient-primary text-primary-foreground font-semibold text-sm"
-                >
-                  Create an account
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => setNotFound(false)}
-                  className="text-xs text-muted-foreground underline"
-                >
-                  Try a different email
-                </button>
-              </div>
-            ) : sent ? (
+            {sent ? (
               <p className="text-sm text-center text-foreground">
-                A reset link has been sent. Check your inbox.
+                If an account exists for that email, a reset link has been sent. Check your inbox.
               </p>
             ) : (
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
