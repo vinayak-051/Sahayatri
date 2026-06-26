@@ -84,7 +84,7 @@ const Guides = () => {
               animate={{ y: 0, opacity: 1 }}
               transition={{ delay: i * 0.1 }}
               onClick={() => navigate(`/guide/${g.id}`)}
-              className="w-full glass rounded-2xl p-4 shadow-card flex items-center gap-4 text-left border border-primary/10"
+              className="w-full glass rounded-2xl p-4 shadow-card flex items-center gap-4 text-left border border-primary/10 card-lift"
             >
               <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center text-3xl font-bold overflow-hidden">
                 {g.profile_photo_url ? (

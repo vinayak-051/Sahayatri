@@ -20,9 +20,11 @@ const BottomNav = () => {
         {tabs.map((tab) => {
           const isActive = location.pathname === tab.path;
           return (
-            <button
+            <motion.button
               key={tab.path}
               onClick={() => navigate(tab.path)}
+              whileTap={{ scale: 0.88 }}
+              transition={{ duration: 0.1 }}
               className="flex flex-col items-center gap-0.5 py-1 px-3 relative"
             >
               {isActive && (
@@ -32,18 +34,25 @@ const BottomNav = () => {
                   transition={{ type: "spring", stiffness: 500, damping: 30 }}
                 />
               )}
-              <tab.icon
-                size={22}
-                className={isActive ? "text-primary" : "text-muted-foreground"}
-              />
-              <span
-                className={`text-[10px] font-medium ${
-                  isActive ? "text-primary" : "text-muted-foreground"
+              <motion.div
+                animate={{ scale: isActive ? 1.15 : 1 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+              >
+                <tab.icon
+                  size={22}
+                  className={`transition-colors duration-200 ${isActive ? "text-primary" : "text-muted-foreground"}`}
+                />
+              </motion.div>
+              <motion.span
+                animate={{ opacity: isActive ? 1 : 0.7 }}
+                transition={{ duration: 0.2 }}
+                className={`text-[10px] transition-all duration-200 ${
+                  isActive ? "text-primary font-semibold" : "text-muted-foreground font-medium"
                 }`}
               >
                 {tab.label}
-              </span>
-            </button>
+              </motion.span>
+            </motion.button>
           );
         })}
       </div>

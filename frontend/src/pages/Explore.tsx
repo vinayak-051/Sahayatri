@@ -75,13 +75,13 @@ const Explore = () => {
       </div>
 
       <div className="px-6 mb-6">
-        <div className="glass rounded-3xl px-5 py-4 flex items-center gap-4 shadow-elevated border border-primary/10">
-          <Search size={22} className="text-primary animate-pulse" />
+        <div className="glass rounded-3xl px-5 py-4 flex items-center gap-4 shadow-elevated border border-primary/10 input-polished">
+          <Search size={22} className="text-primary/80 shrink-0" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search spots, cities, tags..."
-            className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+            className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground/80 focus:outline-none"
           />
         </div>
       </div>
@@ -117,7 +117,7 @@ const Explore = () => {
         {loading ? (
           <div className="grid grid-cols-2 gap-4">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="aspect-[3/4] rounded-[2rem] bg-muted/50 animate-pulse" />
+              <div key={i} className="aspect-[3/4] rounded-[2rem] skeleton" />
             ))}
           </div>
         ) : (
@@ -130,7 +130,7 @@ const Explore = () => {
                   animate={{ y: 0, opacity: 1 }}
                   transition={{ delay: Math.min(i * 0.05, 0.5) }}
                   onClick={() => navigate(`/location/${loc.id}`)}
-                  className="flex flex-col text-left group"
+                  className="flex flex-col text-left group card-lift"
                 >
                   <div className="relative aspect-[3/4] w-full rounded-[2rem] overflow-hidden shadow-card mb-2 border border-white/20 bg-secondary">
                     {loc.photos?.[0] ? (
@@ -144,7 +144,7 @@ const Explore = () => {
                         <MapPin size={28} />
                       </div>
                     )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/15 to-transparent" />
 
                     <div className="absolute top-3 right-3 h-6 px-2.5 glass-dark rounded-full flex items-center text-[8px] font-extrabold text-white uppercase tracking-wider">
                       {loc.category}

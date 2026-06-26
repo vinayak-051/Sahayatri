@@ -70,7 +70,7 @@ const Home = () => {
     <div className="min-h-screen gradient-sky pb-20">
       <div className="relative h-[45vh] overflow-hidden">
         <img src={heroImg} alt="Travel" className="absolute inset-0 w-full h-full object-cover" />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-background" />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/45 via-black/10 to-background" />
         <button
           onClick={() => navigate("/notifications")}
           className="absolute top-6 right-6 z-20 p-2.5 glass rounded-full shadow-card active:scale-95 transition-transform"
@@ -93,14 +93,14 @@ const Home = () => {
       </div>
 
       <div className="px-6 -mt-6 relative z-20">
-        <motion.form onSubmit={handleSearch} initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2 }} className="glass rounded-2xl px-4 py-3 flex items-center gap-3 shadow-elevated">
-          <Search size={20} className="text-muted-foreground" />
+        <motion.form onSubmit={handleSearch} initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2 }} className="glass rounded-2xl px-5 py-3.5 flex items-center gap-3 shadow-elevated input-polished">
+          <Search size={20} className="text-primary/70 shrink-0" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search destinations, guides..."
-            className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+            className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground/80 focus:outline-none"
           />
           {searching && <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />}
         </motion.form>
@@ -176,7 +176,7 @@ const Home = () => {
       )}
 
       <div className="px-6 mt-8">
-        <h2 className="text-base font-semibold text-foreground mb-4">Explore Features</h2>
+        <h2 className="text-[1.07rem] font-bold text-foreground mb-4">Explore Features</h2>
         <div className="grid grid-cols-2 gap-4">
           {features.map((f, i) => (
             <motion.button
@@ -185,7 +185,7 @@ const Home = () => {
               animate={{ y: 0, opacity: 1 }}
               transition={{ delay: 0.3 + i * 0.1 }}
               onClick={() => navigate(f.path)}
-              className="glass rounded-3xl p-6 flex flex-col items-center gap-4 shadow-elevated hover:shadow-glow transition-all"
+              className="glass rounded-3xl p-5 flex flex-col items-center gap-3 shadow-elevated card-lift"
             >
               <div className={`w-16 h-16 rounded-2xl ${f.color} flex items-center justify-center shadow-lg`}>
                 <f.icon size={32} className="text-primary-foreground" />
@@ -202,7 +202,7 @@ const Home = () => {
       {topLocations.length > 0 && (
         <div className="mt-8">
           <div className="px-6 flex items-center justify-between mb-4">
-            <h2 className="text-base font-semibold text-foreground">Popular Destinations</h2>
+            <h2 className="text-[1.07rem] font-bold text-foreground">Popular Destinations</h2>
             <button onClick={() => navigate("/explore")} className="text-xs text-primary font-bold">See all</button>
           </div>
           <div className="grid grid-cols-4 gap-3 px-6">
@@ -213,7 +213,7 @@ const Home = () => {
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ delay: 0.4 + i * 0.1 }}
                 onClick={() => navigate(`/location/${loc.id}`)}
-                className="flex flex-col items-center gap-2 cursor-pointer"
+                className="flex flex-col items-center gap-2 cursor-pointer card-lift"
               >
                 <div className="relative w-full aspect-[3/4] rounded-2xl overflow-hidden shadow-card bg-secondary">
                   {loc.photos?.[0] ? (
@@ -223,7 +223,7 @@ const Home = () => {
                       <MapPin size={24} />
                     </div>
                   )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
                   <div className="absolute bottom-0 left-0 right-0 p-2">
                     <div className="flex items-center gap-1">
                       <MapPin size={8} className="text-accent" />

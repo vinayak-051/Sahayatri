@@ -87,12 +87,27 @@ export default {
           "0%, 100%": { boxShadow: "0 0 20px hsl(33 100% 50% / 0.3)" },
           "50%": { boxShadow: "0 0 40px hsl(33 100% 50% / 0.6)" },
         },
+        "shimmer": {
+          "0%":   { transform: "translateX(-100%)" },
+          "100%": { transform: "translateX(100%)" },
+        },
+        "fade-up": {
+          "from": { opacity: "0", transform: "translateY(8px)" },
+          "to":   { opacity: "1", transform: "translateY(0)" },
+        },
+        "spin-slow": {
+          "from": { transform: "rotate(0deg)" },
+          "to":   { transform: "rotate(360deg)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
         "float": "float 3s ease-in-out infinite",
         "pulse-glow": "pulse-glow 2s ease-in-out infinite",
+        "shimmer": "shimmer 1.5s ease-in-out infinite",
+        "fade-up": "fade-up 0.28s ease forwards",
+        "spin-slow": "spin-slow 4s linear infinite",
       },
     },
   },
