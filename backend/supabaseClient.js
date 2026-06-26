@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import "dotenv/config";
+import ws from "ws";
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -15,4 +16,5 @@ if (!supabaseUrl || !serviceRoleKey) {
 // frontend bundle.
 export const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
   auth: { autoRefreshToken: false, persistSession: false },
+  realtime: { transport: ws },
 });

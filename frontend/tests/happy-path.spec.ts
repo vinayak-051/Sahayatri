@@ -25,7 +25,7 @@ test.describe("Traveler happy path", () => {
     await firstCard.click();
 
     await expect(page).toHaveURL(/\/location\//);
-    await expect(page.getByText("Hosted by")).toBeVisible();
+    await expect(page.getByText("Hosted by").first()).toBeVisible();
   });
 });
 
