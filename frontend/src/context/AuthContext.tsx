@@ -23,6 +23,7 @@ interface AuthContextValue {
   isLoading: boolean;
   isGuide: boolean;
   isTraveler: boolean;
+  isAdmin: boolean;
   login: (email: string, password: string, expectedRole?: Role) => Promise<{ error: string | null }>;
   register: (params: RegisterParams) => Promise<{ error: string | null; needsEmailConfirmation: boolean }>;
   loginWithGoogle: (redirectPath?: string) => Promise<{ error: string | null }>;
@@ -166,6 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         isGuide: user?.role === "guide",
         isTraveler: user?.role === "traveler",
+        isAdmin: user?.is_admin === true,
         login,
         register,
         loginWithGoogle,

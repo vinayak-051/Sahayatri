@@ -5,40 +5,54 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabaseClient";
 import type { Profile } from "@/types/database";
 
+const PAGE_SIZE = 15;
+
 const Guides = () => {
   const navigate = useNavigate();
   const [guides, setGuides] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [searchName, setSearchName] = useState("");
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
 
-  const fetchGuides = async (name = "") => {
-    setLoading(true);
+  const fetchGuides = async (name = "", reset = false) => {
+    const currentOffset = reset ? 0 : offset;
+    if (reset) setLoading(true); else setLoadingMore(true);
+
     let query = supabase
       .from("profiles")
       .select("id, name, profile_photo_url, is_verified, city, rating, languages, rate_per_day")
       .eq("role", "guide")
-      .order("name", { ascending: true });
+      .order("name", { ascending: true })
+      .range(currentOffset, currentOffset + PAGE_SIZE - 1);
     if (name) query = query.ilike("name", `%${name}%`);
+
     const { data, error } = await query;
     if (error) {
       console.error("Failed to fetch guides:", error.message);
-      setGuides([]);
     } else {
-      setGuides((data ?? []) as Profile[]);
+      const fetched = (data ?? []) as Profile[];
+      setGuides(reset ? fetched : (prev) => [...prev, ...fetched]);
+      setHasMore(fetched.length === PAGE_SIZE);
+      setOffset(currentOffset + PAGE_SIZE);
     }
-    setLoading(false);
+    if (reset) setLoading(false); else setLoadingMore(false);
   };
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const name = params.get("q") || params.get("city") || "";
     setSearchName(name);
-    fetchGuides(name);
-  }, []);
+    setOffset(0);
+    fetchGuides(name, true);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    fetchGuides(searchName);
+    setOffset(0);
+    setHasMore(true);
+    fetchGuides(searchName, true);
   };
 
   return (
@@ -113,6 +127,20 @@ const Guides = () => {
             <p className="text-sm">No verified guides found yet.</p>
           </div>
         ) : null}
+
+        {hasMore && !loading && guides.length > 0 && (
+          <div className="flex justify-center mt-4">
+            <button
+              onClick={() => fetchGuides(searchName, false)}
+              disabled={loadingMore}
+              className="px-6 py-2.5 rounded-2xl gradient-primary text-primary-foreground text-sm font-semibold shadow-glow disabled:opacity-60 flex items-center gap-2"
+            >
+              {loadingMore ? (
+                <><div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" /> Loading...</>
+              ) : "Load More"}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

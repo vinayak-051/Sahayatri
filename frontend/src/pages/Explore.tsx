@@ -17,37 +17,50 @@ const categories = [
   { id: "Heritage", emoji: "🏯", label: "Heritage" },
 ];
 
+const PAGE_SIZE = 12;
+
 const Explore = () => {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [locations, setLocations] = useState<Location[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+
+  const fetchLocations = async (reset = false) => {
+    const currentOffset = reset ? 0 : offset;
+    if (reset) setLoading(true); else setLoadingMore(true);
+
+    let query = supabase
+      .from("locations")
+      .select("*, guide:profiles!locations_guide_id_fkey(id, name, profile_photo_url, city, rating)")
+      .eq("status", "active")
+      .order("created_at", { ascending: false })
+      .range(currentOffset, currentOffset + PAGE_SIZE - 1);
+
+    if (selectedCategory !== "All") {
+      query = query.eq("category", selectedCategory);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      console.error("Failed to load locations:", error.message);
+    } else {
+      const fetched = (data ?? []) as Location[];
+      setLocations(reset ? fetched : (prev) => [...prev, ...fetched]);
+      setHasMore(fetched.length === PAGE_SIZE);
+      setOffset(currentOffset + PAGE_SIZE);
+    }
+    if (reset) setLoading(false); else setLoadingMore(false);
+  };
 
   useEffect(() => {
-    const fetchLocations = async () => {
-      setLoading(true);
-      let query = supabase
-        .from("locations")
-        .select("*, guide:profiles!locations_guide_id_fkey(id, name, profile_photo_url, city, rating)")
-        .eq("status", "active")
-        .order("created_at", { ascending: false });
-
-      if (selectedCategory !== "All") {
-        query = query.eq("category", selectedCategory);
-      }
-
-      const { data, error } = await query;
-      if (error) {
-        console.error("Failed to load locations:", error.message);
-        setLocations([]);
-      } else {
-        setLocations((data ?? []) as Location[]);
-      }
-      setLoading(false);
-    };
-    fetchLocations();
-  }, [selectedCategory]);
+    setOffset(0);
+    setHasMore(true);
+    fetchLocations(true);
+  }, [selectedCategory]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filteredItems = locations.filter((loc) => {
     const haystack = [loc.title, loc.guide?.city ?? "", ...(loc.tags ?? [])].join(" ").toLowerCase();
@@ -158,6 +171,20 @@ const Explore = () => {
                 <p className="text-xs text-muted-foreground mt-1">Try another category or search query</p>
               </div>
             )}
+          </div>
+        )}
+
+        {hasMore && !loading && filteredItems.length > 0 && (
+          <div className="flex justify-center mt-6">
+            <button
+              onClick={() => fetchLocations(false)}
+              disabled={loadingMore}
+              className="px-6 py-2.5 rounded-2xl gradient-primary text-primary-foreground text-sm font-semibold shadow-glow disabled:opacity-60 flex items-center gap-2"
+            >
+              {loadingMore ? (
+                <><div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" /> Loading...</>
+              ) : "Load More"}
+            </button>
           </div>
         )}
       </div>

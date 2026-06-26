@@ -26,6 +26,7 @@ export interface Profile {
   rate_per_day: number | null;
   is_available: boolean;
   is_verified: boolean;
+  is_admin: boolean;
   onboarded: boolean;
   created_at: string;
 }

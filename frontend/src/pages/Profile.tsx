@@ -1,24 +1,28 @@
 import { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronRight, Map, Shield, Settings, LogOut, Compass, User, Camera, X, Check, Lock, MapPin, Globe, Briefcase, FileText, Lightbulb } from "lucide-react";
+import { ChevronRight, Map, Shield, LogOut, Compass, User, Camera, X, Check, Lock, MapPin, Globe, Briefcase, FileText, Lightbulb, ShieldCheck } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import BottomNav from "@/components/BottomNav";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/context/AuthContext";
+
 import { validateImageFile } from "@/lib/validateImage";
 
-const menuItems = [
+const baseMenuItems = [
   { icon: Compass, label: "Become a Guide", path: "/role-select" },
   { icon: Map, label: "My Trips", path: "/trips" },
   { icon: Lightbulb, label: "Trip Tips", path: "/ai-guide" },
   { icon: Shield, label: "Safety", path: "/safety" },
-  { icon: Settings, label: "Settings", path: "#" },
 ];
 
 const Profile = () => {
   const navigate = useNavigate();
-  const { user, isGuide, logout, refreshProfile } = useAuth();
+  const { user, isGuide, isAdmin, logout, refreshProfile } = useAuth();
+  const menuItems = [
+    ...baseMenuItems,
+    ...(isAdmin ? [{ icon: ShieldCheck, label: "Admin Dashboard", path: "/admin" }] : []),
+  ];
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [showEdit, setShowEdit] = useState(false);
