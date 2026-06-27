@@ -297,7 +297,11 @@ const LocationDetail = () => {
           <div className="grid grid-cols-2 gap-3 text-xs">
             <div className="flex items-center gap-2 text-muted-foreground"><Clock size={14} /> {location.timings || "Flexible"}</div>
             <div className="flex items-center gap-2 text-muted-foreground"><ShieldCheck size={14} /> Safety: {location.safety_level}</div>
-            {location.pricing && <div className="col-span-2 font-semibold text-primary">{location.pricing}</div>}
+            {location.price_per_person != null ? (
+              <div className="col-span-2 font-semibold text-primary">₹{location.price_per_person.toLocaleString()} per person</div>
+            ) : location.pricing ? (
+              <div className="col-span-2 font-semibold text-primary">{location.pricing}</div>
+            ) : null}
           </div>
           {location.tags?.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mt-4">

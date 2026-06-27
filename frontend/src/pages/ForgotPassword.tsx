@@ -52,7 +52,7 @@ const ForgotPassword = () => {
           transition={{ duration: 0.6 }}
           className="w-full max-w-sm"
         >
-          <Link to="/auth" className="inline-flex items-center gap-1 text-primary-foreground/70 text-sm mb-6">
+          <Link to={authPath} className="inline-flex items-center gap-1 text-primary-foreground/70 text-sm mb-6">
             <ArrowLeft size={16} /> Back to sign in
           </Link>
 
