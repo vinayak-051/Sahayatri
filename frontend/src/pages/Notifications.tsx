@@ -6,16 +6,6 @@ import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/context/AuthContext";
 import type { AppNotification, NotificationType } from "@/types/database";
 
-const getNavPath = (n: AppNotification, isGuide: boolean): string => {
-  switch (n.type) {
-    case "new_message": return isGuide ? "/guide-messenger" : "/messages";
-    case "booking_requested": return "/guide-bookings";
-    case "booking_accepted":
-    case "booking_declined":
-    case "booking_cancelled": return isGuide ? "/guide-bookings" : "/trips";
-    default: return "";
-  }
-};
 
 const ICONS: Record<NotificationType, { icon: typeof Calendar; color: string }> = {
   booking_requested: { icon: Calendar, color: "gradient-accent" },
