@@ -162,7 +162,7 @@ const GuideDetail = () => {
         >
           <div className="w-24 h-24 rounded-full bg-secondary flex items-center justify-center text-5xl mx-auto mb-4 overflow-hidden">
             {guide.profile_photo_url ? (
-              <img src={guide.profile_photo_url} loading="lazy" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+              <img src={guide.profile_photo_url} alt={guide.name} loading="lazy" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
             ) : (
               "🧭"
             )}

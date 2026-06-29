@@ -312,6 +312,16 @@ const LocationDetail = () => {
         </div>
       </div>
 
+      {(location.photos?.length ?? 0) > 1 && (
+        <div className="px-6 mt-4">
+          <div className="flex gap-3 overflow-x-auto hide-scrollbar pb-1">
+            {location.photos.map((url, i) => (
+              <img key={i} src={url} alt="" className="w-24 h-24 rounded-2xl object-cover flex-shrink-0 border-2 border-white/20 shadow-card" />
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="px-6 -mt-6">
         <div className="glass rounded-2xl p-5 shadow-card mb-6">
           <h2 className="text-sm font-bold text-foreground mb-2">About this spot</h2>

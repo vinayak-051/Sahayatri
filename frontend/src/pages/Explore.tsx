@@ -57,6 +57,10 @@ const Explore = () => {
     if (priceFilter === "above2000") query = query.gt("price_per_person", 2000);
     if (debouncedSearch.trim()) query = query.or(`title.ilike.%${debouncedSearch.trim()}%,tags.cs.{${debouncedSearch.trim()}}`);
 
+    if (search.trim()) {
+      query = query.ilike("title", `%${search.trim()}%`);
+    }
+
     const { data, error } = await query;
     if (error) {
       console.error("Failed to load locations:", error.message);
@@ -205,7 +209,7 @@ const Explore = () => {
           </div>
         )}
 
-        {hasMore && !loading && filteredItems.length > 0 && (
+        {hasMore && !loading && !search.trim() && filteredItems.length > 0 && (
           <div className="flex justify-center mt-6">
             <button
               onClick={() => fetchLocations(false)}

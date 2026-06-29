@@ -64,8 +64,8 @@ const GuideLocations = () => {
     tags: "",
     bestVisitingTime: "",
   });
-  const [files, setFiles] = useState<FileList | null>(null);
   const [existingPhotos, setExistingPhotos] = useState<string[]>([]);
+  const [files, setFiles] = useState<FileList | null>(null);
   const [reportsByLocation, setReportsByLocation] = useState<Record<string, Report[]>>({});
   const [expandedReports, setExpandedReports] = useState<string | null>(null);
   const [placeQuery, setPlaceQuery] = useState("");
@@ -175,8 +175,8 @@ const GuideLocations = () => {
       tags: loc.tags?.join(", ") || "",
       bestVisitingTime: loc.best_visiting_time || "",
     });
+    setExistingPhotos(loc.photos ?? []);
     setFiles(null);
-    setExistingPhotos(loc.photos || []);
     setShowAddForm(true);
   };
 
