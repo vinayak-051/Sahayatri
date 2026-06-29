@@ -4,6 +4,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { toast } from "sonner";
 import { Mail, ArrowLeft } from "lucide-react";
 import heroImg from "@/assets/hero-travel.jpg";
 import { supabase } from "@/lib/supabaseClient";
@@ -31,6 +32,18 @@ const ForgotPassword = () => {
   const onSubmit = async ({ email }: FormValues) => {
     setLoading(true);
     try {
+      const { data } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("email", email)
+        .eq("role", role)
+        .maybeSingle();
+
+      if (!data) {
+        toast.error(`No ${role} account found with that email.`);
+        return;
+      }
+
       await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/reset-password`,
       });

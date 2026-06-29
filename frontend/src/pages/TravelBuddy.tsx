@@ -148,7 +148,7 @@ const TravelBuddy = () => {
   return (
     <div className="min-h-screen gradient-sky pb-20">
       <div className="px-6 pt-6 pb-4 flex items-center gap-3">
-        <button onClick={() => navigate(-1)} className="p-1"><ArrowLeft size={22} className="text-foreground" /></button>
+        <button onClick={() => navigate("/home")} className="p-1"><ArrowLeft size={22} className="text-foreground" /></button>
         <h1 className="text-lg font-bold text-foreground">Travel Buddy</h1>
       </div>
 

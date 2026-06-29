@@ -56,7 +56,11 @@ const GuideBookings = () => {
       const status = action === "accept" ? "accepted" : "declined";
       const { error } = await supabase.from("bookings").update({ status }).eq("id", bookingId);
       if (error) {
-        toast.error(error.message);
+        if (error.message.toLowerCase().includes("not verified")) {
+          toast.error("Your account must be verified by admin before you can accept bookings.");
+        } else {
+          toast.error(error.message);
+        }
         return;
       }
       setBookings((prev) => prev.map((b) => (b.id === bookingId ? { ...b, status } : b)));

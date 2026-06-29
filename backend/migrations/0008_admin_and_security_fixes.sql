@@ -16,16 +16,25 @@ BEGIN
 EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
 
+DO $$
+BEGIN
+  DROP POLICY IF EXISTS "profiles_select_own" ON profiles;
+  DROP POLICY IF EXISTS "profiles_select_guides" ON profiles;
+  DROP POLICY IF EXISTS "profiles_select_booking_parties" ON profiles;
+  DROP POLICY IF EXISTS "profiles_select_message_parties" ON profiles;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
 -- Authenticated users can read their own profile
-CREATE POLICY IF NOT EXISTS "profiles_select_own" ON profiles
+CREATE POLICY "profiles_select_own" ON profiles
   FOR SELECT USING (auth.uid() = id);
 
 -- Authenticated users can read guide profiles (for discovery)
-CREATE POLICY IF NOT EXISTS "profiles_select_guides" ON profiles
+CREATE POLICY "profiles_select_guides" ON profiles
   FOR SELECT USING (role = 'guide' AND auth.uid() IS NOT NULL);
 
 -- Authenticated users can read profiles of people they share a booking with
-CREATE POLICY IF NOT EXISTS "profiles_select_booking_parties" ON profiles
+CREATE POLICY "profiles_select_booking_parties" ON profiles
   FOR SELECT USING (
     auth.uid() IS NOT NULL AND
     EXISTS (
@@ -36,7 +45,7 @@ CREATE POLICY IF NOT EXISTS "profiles_select_booking_parties" ON profiles
   );
 
 -- Authenticated users can read profiles of people they share a message thread with
-CREATE POLICY IF NOT EXISTS "profiles_select_message_parties" ON profiles
+CREATE POLICY "profiles_select_message_parties" ON profiles
   FOR SELECT USING (
     auth.uid() IS NOT NULL AND
     EXISTS (
@@ -71,8 +80,12 @@ $$;
 GRANT EXECUTE ON FUNCTION admin_verify_guide(uuid, boolean) TO authenticated;
 
 -- 4. Booking amount must be positive
-ALTER TABLE bookings
-  ADD CONSTRAINT IF NOT EXISTS bookings_amount_positive CHECK (amount > 0);
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'bookings_amount_positive') THEN
+    ALTER TABLE bookings ADD CONSTRAINT bookings_amount_positive CHECK (amount >= 0);
+  END IF;
+END $$;
 
 -- 5. Reviews: only allow review if there is a completed booking with that guide
 --    Drop whatever insert policy currently exists and replace with a stricter one.
@@ -83,7 +96,7 @@ BEGIN
 EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
 
-CREATE POLICY IF NOT EXISTS "reviews_insert_completed_booking" ON reviews
+CREATE POLICY "reviews_insert_completed_booking" ON reviews
   FOR INSERT WITH CHECK (
     auth.uid() = reviewer_id AND
     EXISTS (

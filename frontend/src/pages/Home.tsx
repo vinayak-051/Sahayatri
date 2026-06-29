@@ -33,8 +33,9 @@ const Home = () => {
     const fetchTopLocations = async () => {
       const { data } = await supabase
         .from("locations")
-        .select("*, guide:profiles!locations_guide_id_fkey(city)")
+        .select("*, guide:profiles!locations_guide_id_fkey!inner(city)")
         .eq("status", "active")
+        .eq("profiles.is_verified", true)
         .order("rating", { ascending: false })
         .order("created_at", { ascending: false })
         .limit(4);
@@ -48,11 +49,11 @@ const Home = () => {
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!searchQuery.trim()) return;
+    if (!searchQuery.trim() || searchQuery.trim().length < 2) return;
     setSearching(true);
     try {
       const [{ data: guides }, { data: buddyTrips }] = await Promise.all([
-        supabase.from("profiles").select("*").eq("role", "guide").or(`name.ilike.%${searchQuery}%,city.ilike.%${searchQuery}%,specialization.ilike.%${searchQuery}%`),
+        supabase.from("profiles").select("*").eq("role", "guide").eq("is_verified", true).or(`name.ilike.%${searchQuery}%,city.ilike.%${searchQuery}%,specialization.ilike.%${searchQuery}%`),
         supabase
           .from("buddy_trips")
           .select("*, user:profiles!buddy_trips_user_id_fkey(id, name)")

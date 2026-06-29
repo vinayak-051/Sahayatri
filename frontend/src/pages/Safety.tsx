@@ -65,7 +65,7 @@ const Safety = () => {
     navigator.clipboard?.writeText(locationLink).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    });
+    }).catch(() => toast.info("Couldn't copy — please copy the link manually."));
   };
 
   return (

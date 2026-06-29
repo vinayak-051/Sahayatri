@@ -23,6 +23,12 @@ const ProtectedRoute = ({ children, role = "any" }: ProtectedRouteProps) => {
     return <Navigate to="/auth" state={{ from: location }} replace />;
   }
 
+  // Admin is locked to /admin only — bypass all role/onboarding checks
+  if (user.is_admin) {
+    if (location.pathname !== "/admin") return <Navigate to="/admin" replace />;
+    return <>{children}</>;
+  }
+
   if (!user.onboarded && location.pathname !== "/complete-profile") {
     return <Navigate to="/complete-profile" replace />;
   }

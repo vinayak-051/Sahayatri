@@ -24,6 +24,7 @@ const Guides = () => {
       .from("profiles")
       .select("id, name, profile_photo_url, is_verified, city, rating, languages, rate_per_day")
       .eq("role", "guide")
+      .eq("is_verified", true)
       .order("name", { ascending: true })
       .range(currentOffset, currentOffset + PAGE_SIZE - 1);
     if (name) query = query.ilike("name", `%${name}%`);
@@ -48,8 +49,14 @@ const Guides = () => {
     fetchGuides(name, true);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    document.title = "Find a Guide | Sahayatri";
+    return () => { document.title = "Sahayatri - Your Journey, Our Guidance"; };
+  }, []);
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
+    if (searchName.trim().length > 0 && searchName.trim().length < 2) return;
     setOffset(0);
     setHasMore(true);
     fetchGuides(searchName, true);
@@ -58,7 +65,7 @@ const Guides = () => {
   return (
     <div className="min-h-screen gradient-sky pb-20">
       <div className="px-6 pt-6 pb-4 flex items-center gap-3">
-        <button onClick={() => navigate(-1)} className="p-1"><ArrowLeft size={22} className="text-foreground" /></button>
+        <button onClick={() => navigate("/home")} className="p-1"><ArrowLeft size={22} className="text-foreground" /></button>
         <h1 className="text-lg font-bold text-foreground">Find a Guide</h1>
       </div>
 
@@ -88,7 +95,7 @@ const Guides = () => {
             >
               <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center text-3xl font-bold overflow-hidden">
                 {g.profile_photo_url ? (
-                  <img src={g.profile_photo_url} className="w-full h-full object-cover" />
+                  <img src={g.profile_photo_url} loading="lazy" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
                 ) : (
                   "🧭"
                 )}

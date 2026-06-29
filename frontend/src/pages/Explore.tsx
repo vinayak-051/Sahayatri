@@ -19,15 +19,23 @@ const categories = [
 
 const PAGE_SIZE = 12;
 
+type PriceFilter = "all" | "under500" | "500to2000" | "above2000";
+
 const Explore = () => {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
+  const [priceFilter, setPriceFilter] = useState<PriceFilter>("all");
   const [locations, setLocations] = useState<Location[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(true);
+
+  useEffect(() => {
+    document.title = "Explore India | Sahayatri";
+    return () => { document.title = "Sahayatri - Your Journey, Our Guidance"; };
+  }, []);
 
   const fetchLocations = async (reset = false) => {
     const currentOffset = reset ? 0 : offset;
@@ -35,14 +43,16 @@ const Explore = () => {
 
     let query = supabase
       .from("locations")
-      .select("*, guide:profiles!locations_guide_id_fkey(id, name, profile_photo_url, city, rating)")
+      .select("*, guide:profiles!locations_guide_id_fkey!inner(id, name, profile_photo_url, city, rating)")
       .eq("status", "active")
+      .eq("profiles.is_verified", true)
       .order("created_at", { ascending: false })
       .range(currentOffset, currentOffset + PAGE_SIZE - 1);
 
-    if (selectedCategory !== "All") {
-      query = query.eq("category", selectedCategory);
-    }
+    if (selectedCategory !== "All") query = query.eq("category", selectedCategory);
+    if (priceFilter === "under500") query = query.lt("price_per_person", 500);
+    if (priceFilter === "500to2000") query = query.gte("price_per_person", 500).lte("price_per_person", 2000);
+    if (priceFilter === "above2000") query = query.gt("price_per_person", 2000);
 
     const { data, error } = await query;
     if (error) {
@@ -60,7 +70,7 @@ const Explore = () => {
     setOffset(0);
     setHasMore(true);
     fetchLocations(true);
-  }, [selectedCategory]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedCategory, priceFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filteredItems = locations.filter((loc) => {
     const haystack = [loc.title, loc.guide?.city ?? "", ...(loc.tags ?? [])].join(" ").toLowerCase();
@@ -84,6 +94,21 @@ const Explore = () => {
             className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground/80 focus:outline-none"
           />
         </div>
+      </div>
+
+      <div className="flex gap-2 overflow-x-auto px-6 mb-3 hide-scrollbar">
+        {(["all", "under500", "500to2000", "above2000"] as PriceFilter[]).map((p) => {
+          const labels = { all: "All Prices", under500: "Under ₹500", "500to2000": "₹500–₹2k", above2000: "₹2k+" };
+          return (
+            <button
+              key={p}
+              onClick={() => setPriceFilter(p)}
+              className={`px-4 py-2 rounded-2xl text-[12px] font-bold whitespace-nowrap transition-all ${priceFilter === p ? "gradient-primary text-primary-foreground shadow-glow" : "glass text-foreground border border-primary/5"}`}
+            >
+              {labels[p]}
+            </button>
+          );
+        })}
       </div>
 
       <div className="flex gap-3 overflow-x-auto px-6 mb-8 hide-scrollbar">
@@ -137,7 +162,9 @@ const Explore = () => {
                       <img
                         src={loc.photos[0]}
                         alt={loc.title}
+                        loading="lazy"
                         className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-muted-foreground">

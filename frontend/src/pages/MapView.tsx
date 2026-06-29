@@ -87,7 +87,7 @@ const MapView = () => {
   return (
     <div className="h-screen flex flex-col">
       <div className="glass px-4 py-3 flex items-center gap-3 border-b border-border z-[1000] relative">
-        <button onClick={() => navigate(-1)} className="p-1">
+        <button onClick={() => navigate("/home")} className="p-1">
           <ArrowLeft size={22} className="text-foreground" />
         </button>
         <h1 className="text-sm font-semibold text-foreground flex-1">Map View</h1>

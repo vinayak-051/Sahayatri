@@ -39,14 +39,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
 
-  const fetchProfile = useCallback(async (userId: string) => {
+  const fetchProfile = useCallback(async (userId: string): Promise<Profile | null> => {
     const { data, error } = await supabase.from("profiles").select("*").eq("id", userId).single();
     if (error) {
       console.error("Failed to load profile:", error.message);
       setUser(null);
-      return;
+      return null;
     }
     setUser(data as Profile);
+    return data as Profile;
   }, []);
 
   useEffect(() => {
@@ -69,7 +70,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!mounted) return;
       setSession(data.session);
       if (data.session?.user) {
-        await fetchProfile(data.session.user.id);
+        const profile = await fetchProfile(data.session.user.id);
+        if (profile?.is_admin && window.location.pathname !== "/admin") {
+          navigate("/admin");
+        }
       }
       setIsLoading(false);
     });
@@ -77,7 +81,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: listener } = supabase.auth.onAuthStateChange(async (event, newSession) => {
       setSession(newSession);
       if (newSession?.user) {
-        await fetchProfile(newSession.user.id);
+        const profile = await fetchProfile(newSession.user.id);
+        if (event === "SIGNED_IN" && profile?.is_admin) {
+          navigate("/admin");
+        }
       } else {
         setUser(null);
       }
@@ -100,8 +107,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) return { error: error.message || "Something went wrong. Please try again." };
 
     if (expectedRole && data.user) {
-      const { data: profile } = await supabase.from("profiles").select("role").eq("id", data.user.id).single();
-      if (profile?.role !== expectedRole) {
+      const { data: profile } = await supabase.from("profiles").select("role, is_admin").eq("id", data.user.id).single();
+      // Admin can log in through any login form — skip role enforcement
+      if (!profile?.is_admin && profile?.role !== expectedRole) {
         await supabase.auth.signOut();
         setUser(null);
         setSession(null);

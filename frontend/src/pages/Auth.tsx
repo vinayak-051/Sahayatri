@@ -32,7 +32,12 @@ const Auth = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const { login, register: registerAccount, loginWithGoogle } = useAuth();
+  const { user, login, register: registerAccount, loginWithGoogle } = useAuth();
+
+  // Already logged in
+  if (user?.is_admin) { navigate("/admin"); return null; }
+  if (user?.role === "traveler") { navigate("/home"); return null; }
+  if (user?.role === "guide") { navigate("/guide-dashboard"); return null; }
 
   const {
     register,

@@ -75,6 +75,11 @@ const GuideProfile = () => {
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+    const parsedRate = formData.ratePerDay.trim() ? Number(formData.ratePerDay) : null;
+    if (parsedRate !== null && (isNaN(parsedRate) || parsedRate <= 0 || parsedRate > 100000)) {
+      toast.error("Rate must be between ₹1 and ₹1,00,000 per day.");
+      return;
+    }
     setEditing(true);
     try {
       const { error } = await supabase
@@ -85,7 +90,7 @@ const GuideProfile = () => {
           city: formData.city,
           specialization: formData.specialization,
           languages: formData.languages.split(",").map((l) => l.trim()).filter(Boolean),
-          rate_per_day: formData.ratePerDay.trim() ? Number(formData.ratePerDay) : null,
+          rate_per_day: parsedRate,
         })
         .eq("id", user.id);
       if (error) {
@@ -164,6 +169,14 @@ const GuideProfile = () => {
   return (
     <div className="min-h-screen gradient-sky pb-24 text-foreground">
       <div className="px-6 pt-8">
+        {!user.is_verified && (
+          <div className="glass rounded-2xl p-4 mb-4 border border-amber-500/40 bg-amber-500/5">
+            <p className="text-sm font-semibold text-amber-600">⏳ Pending Verification</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Your account is awaiting admin verification. You cannot accept bookings until verified.
+            </p>
+          </div>
+        )}
         <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="glass rounded-3xl p-6 shadow-elevated text-center mb-6">
           <div className="relative w-24 h-24 mx-auto mb-4 group">
             <div className="w-full h-full rounded-full bg-secondary flex items-center justify-center text-5xl overflow-hidden border-2 border-primary/20">

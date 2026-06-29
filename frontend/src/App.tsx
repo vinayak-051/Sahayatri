@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/context/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 const Splash = lazy(() => import("./pages/Splash"));
 const RoleSelect = lazy(() => import("./pages/RoleSelect"));
@@ -72,12 +73,12 @@ const App = () => (
               <Route path="/ai-guide" element={<ProtectedRoute role="traveler"><ComingSoon /></ProtectedRoute>} />
               <Route path="/travel-buddy" element={<ProtectedRoute role="traveler"><ComingSoon /></ProtectedRoute>} />
               <Route path="/guides" element={<ProtectedRoute role="traveler"><Guides /></ProtectedRoute>} />
-              <Route path="/guide/:id" element={<ProtectedRoute role="traveler"><GuideDetail /></ProtectedRoute>} />
+              <Route path="/guide/:id" element={<ProtectedRoute role="traveler"><ErrorBoundary><GuideDetail /></ErrorBoundary></ProtectedRoute>} />
               <Route path="/safety" element={<ProtectedRoute role="any"><Safety /></ProtectedRoute>} />
               <Route path="/messages" element={<ProtectedRoute role="traveler"><Messages /></ProtectedRoute>} />
               <Route path="/notifications" element={<ProtectedRoute role="any"><Notifications /></ProtectedRoute>} />
               <Route path="/map" element={<ProtectedRoute role="traveler"><MapView /></ProtectedRoute>} />
-              <Route path="/location/:id" element={<ProtectedRoute role="traveler"><LocationDetail /></ProtectedRoute>} />
+              <Route path="/location/:id" element={<ProtectedRoute role="traveler"><ErrorBoundary><LocationDetail /></ErrorBoundary></ProtectedRoute>} />
 
               {/* Guide */}
               <Route path="/guide-dashboard" element={<ProtectedRoute role="guide"><GuideDashboard /></ProtectedRoute>} />

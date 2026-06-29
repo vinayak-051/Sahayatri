@@ -33,6 +33,11 @@ const LocationDetail = () => {
   const [myComment, setMyComment] = useState("");
   const [submittingReview, setSubmittingReview] = useState(false);
 
+  useEffect(() => {
+    if (location) document.title = `${location.title} | Sahayatri`;
+    return () => { document.title = "Sahayatri - Your Journey, Our Guidance"; };
+  }, [location]);
+
   const fetchMyRequest = useCallback(async (guideId: string, destination: string) => {
     if (!user) return;
     const { data } = await supabase
@@ -198,6 +203,10 @@ const LocationDetail = () => {
 
   const handleRequestTrip = async () => {
     if (!user || !location || !requestDate) return;
+    if (location.price_per_person != null && location.price_per_person <= 0) {
+      toast.error("This location has an invalid price. Contact the guide directly.");
+      return;
+    }
     setRequesting(true);
     try {
       const totalAmount = (location.price_per_person ?? 0) * requestPeople;
@@ -266,15 +275,15 @@ const LocationDetail = () => {
     <div className="min-h-screen gradient-sky pb-28 text-foreground">
       <div className="relative h-[32vh]">
         {location.photos?.[0] ? (
-          <img src={location.photos[0]} alt={location.title} className="absolute inset-0 w-full h-full object-cover" />
+          <img src={location.photos[0]} alt={location.title} loading="lazy" className="absolute inset-0 w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
         ) : (
           <div className="absolute inset-0 bg-primary/20" />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/10" />
-        <button onClick={() => navigate(-1)} className="absolute top-6 left-6 p-2 glass rounded-full shadow-card active:scale-95 transition-transform">
+        <button aria-label="Go back" onClick={() => navigate("/explore")} className="absolute top-6 left-6 z-10 p-2 glass rounded-full shadow-card active:scale-95 transition-transform">
           <ArrowLeft size={20} className="text-foreground" />
         </button>
-        <button onClick={handleSave} className="absolute top-6 right-6 p-2 glass rounded-full shadow-card active:scale-95 transition-transform">
+        <button aria-label="Save to favorites" onClick={handleSave} className="absolute top-6 right-6 z-10 p-2 glass rounded-full shadow-card active:scale-95 transition-transform">
           <Bookmark size={18} className="text-foreground" />
         </button>
         <div className="absolute inset-0 flex flex-col justify-end p-6">
@@ -325,7 +334,7 @@ const LocationDetail = () => {
           >
             <div className="w-12 h-12 rounded-xl bg-secondary overflow-hidden flex items-center justify-center text-2xl">
               {location.guide.profile_photo_url ? (
-                <img src={location.guide.profile_photo_url} className="w-full h-full object-cover" />
+                <img src={location.guide.profile_photo_url} loading="lazy" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
               ) : "🧭"}
             </div>
             <div className="flex-1">
@@ -346,7 +355,7 @@ const LocationDetail = () => {
               {otherListings.map((loc) => (
                 <button key={loc.id} onClick={() => navigate(`/location/${loc.id}`)} className="flex-none w-36 glass rounded-2xl p-3 shadow-card text-left">
                   <div className="w-full aspect-square rounded-xl overflow-hidden mb-2 bg-secondary flex items-center justify-center text-2xl">
-                    {loc.guide?.profile_photo_url ? <img src={loc.guide.profile_photo_url} className="w-full h-full object-cover" /> : "🧭"}
+                    {loc.guide?.profile_photo_url ? <img src={loc.guide.profile_photo_url} loading="lazy" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} /> : "🧭"}
                   </div>
                   <p className="text-xs font-bold text-foreground truncate">{loc.guide?.name}</p>
                   <p className="text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5">

@@ -45,6 +45,11 @@ const GuideDetail = () => {
     fetchGuide();
   }, [id]);
 
+  useEffect(() => {
+    if (guide) document.title = `${guide.name} – Guide | Sahayatri`;
+    return () => { document.title = "Sahayatri - Your Journey, Our Guidance"; };
+  }, [guide]);
+
   const fetchReviews = useCallback(async () => {
     if (!id) return;
     const { data, error } = await supabase
@@ -138,14 +143,14 @@ const GuideDetail = () => {
     <div className="min-h-screen gradient-sky flex flex-col items-center justify-center p-6 text-center">
       <h2 className="text-xl font-bold text-foreground">Guide not found</h2>
       <p className="text-sm text-muted-foreground mt-2">The guide you're looking for doesn't exist or isn't verified.</p>
-      <button onClick={() => navigate(-1)} className="mt-6 py-3 px-8 rounded-2xl bg-primary text-white font-bold">Back to Guides</button>
+      <button onClick={() => navigate("/guides")} className="mt-6 py-3 px-8 rounded-2xl bg-primary text-white font-bold">Back to Guides</button>
     </div>
   );
 
   return (
     <div className="min-h-screen gradient-sky pb-28">
       <div className="px-6 pt-6 pb-4 flex items-center gap-3">
-        <button onClick={() => navigate(-1)} className="p-1"><ArrowLeft size={22} className="text-foreground" /></button>
+        <button onClick={() => navigate("/guides")} className="p-1"><ArrowLeft size={22} className="text-foreground" /></button>
         <h1 className="text-lg font-bold text-foreground">Guide Profile</h1>
       </div>
 
@@ -157,7 +162,7 @@ const GuideDetail = () => {
         >
           <div className="w-24 h-24 rounded-full bg-secondary flex items-center justify-center text-5xl mx-auto mb-4 overflow-hidden">
             {guide.profile_photo_url ? (
-              <img src={guide.profile_photo_url} className="w-full h-full object-cover" />
+              <img src={guide.profile_photo_url} loading="lazy" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
             ) : (
               "🧭"
             )}
@@ -321,12 +326,16 @@ const GuideDetail = () => {
         <div className="flex gap-3 max-w-sm mx-auto">
           <button
             onClick={openBookingForm}
-            disabled={booking || !guide.is_available}
+            disabled={booking || !guide.is_available || !guide.is_verified}
             className={`flex-1 py-3.5 rounded-2xl font-semibold text-sm active:scale-95 transition-transform disabled:opacity-60 ${
-              guide.is_available ? "gradient-primary text-primary-foreground shadow-glow" : "bg-secondary text-muted-foreground"
+              guide.is_available && guide.is_verified ? "gradient-primary text-primary-foreground shadow-glow" : "bg-secondary text-muted-foreground"
             }`}
           >
-            {guide.is_available ? "Book Guide" : "Not Accepting Bookings"}
+            {!guide.is_verified
+              ? "Guide Not Yet Verified"
+              : guide.is_available
+              ? "Book Guide"
+              : "Not Accepting Bookings"}
           </button>
           <button
             onClick={() => navigate(`/messages?userId=${guide.id}&userName=${encodeURIComponent(guide.name)}`)}

@@ -16,7 +16,7 @@ const ICONS: Record<NotificationType, { icon: typeof Calendar; color: string }> 
 
 const Notifications = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, isGuide } = useAuth();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -60,7 +60,7 @@ const Notifications = () => {
   return (
     <div className="min-h-screen gradient-sky pb-20">
       <div className="px-6 pt-6 pb-4 flex items-center gap-3">
-        <button onClick={() => navigate(-1)} className="p-1"><ArrowLeft size={22} className="text-foreground" /></button>
+        <button onClick={() => navigate(isGuide ? "/guide-dashboard" : "/home")} className="p-1"><ArrowLeft size={22} className="text-foreground" /></button>
         <h1 className="text-lg font-bold text-foreground flex-1">Notifications</h1>
       </div>
 

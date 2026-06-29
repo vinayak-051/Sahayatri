@@ -1,0 +1,13 @@
+{
+  "name": "Sahayatri Journeys",
+  "short_name": "Sahayatri",
+  "description": "Find local guides and explore India safely",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f0f9ff",
+  "theme_color": "#4DA8D6",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "/og-image.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
