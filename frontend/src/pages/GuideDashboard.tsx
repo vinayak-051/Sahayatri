@@ -76,7 +76,7 @@ const GuideDashboard = () => {
   const totalEarnings = completedBookings.reduce((sum, b) => sum + Number(b.amount || 0), 0);
 
   const statCards = [
-    { icon: Users, label: "Tourists Served", value: String(completedOrAccepted.length), color: "gradient-primary" },
+    { icon: Users, label: "Tourists Served", value: String(completedBookings.length), color: "gradient-primary" },
     { icon: Star, label: "Rating", value: avgRating ? avgRating.toFixed(1) : "New", color: "gradient-accent" },
     { icon: IndianRupee, label: "Total Earnings", value: `₹${totalEarnings.toLocaleString()}`, color: "gradient-primary" },
     { icon: Calendar, label: "Total Trips", value: String(bookings.length), color: "gradient-accent" },

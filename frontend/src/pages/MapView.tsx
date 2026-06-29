@@ -76,7 +76,9 @@ const MapView = () => {
 
   const guideMarkers = guides.map((g) => {
     const [lat, lng] = coordsForCity(g.city);
-    return { id: `guide-${g.id}`, guideId: g.id, name: g.name, lat, lng, rating: g.rating, type: "guide" as const };
+    const j1 = (g.id.charCodeAt(0) / 255 - 0.5) * 0.04;
+    const j2 = (g.id.charCodeAt(1) / 255 - 0.5) * 0.04;
+    return { id: `guide-${g.id}`, guideId: g.id, name: g.name, lat: lat + j1, lng: lng + j2, rating: g.rating, type: "guide" as const };
   });
 
   const markers = [

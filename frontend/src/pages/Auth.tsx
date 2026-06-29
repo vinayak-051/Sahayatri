@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
@@ -34,10 +34,11 @@ const Auth = () => {
   const navigate = useNavigate();
   const { user, login, register: registerAccount, loginWithGoogle } = useAuth();
 
-  // Already logged in
-  if (user?.is_admin) { navigate("/admin"); return null; }
-  if (user?.role === "traveler") { navigate("/home"); return null; }
-  if (user?.role === "guide") { navigate("/guide-dashboard"); return null; }
+  useEffect(() => {
+    if (user?.is_admin) navigate("/admin");
+    else if (user?.role === "traveler") navigate("/home");
+    else if (user?.role === "guide") navigate("/guide-dashboard");
+  }, [user, navigate]);
 
   const {
     register,
@@ -52,7 +53,7 @@ const Auth = () => {
     setLoading(true);
     try {
       if (isLogin) {
-        const { error } = await login(values.email, values.password, "traveler");
+        const { error } = await login(values.email, values.password);
         if (error) {
           toast.error(error);
           return;

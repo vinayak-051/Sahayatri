@@ -8,7 +8,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/context/AuthContext";
 import type { Booking } from "@/types/database";
 
-const tabs = ["All", "Pending", "Accepted", "Completed"];
+const tabs = ["All", "Pending", "Accepted", "Completed", "Declined", "Cancelled"];
 
 const statusConfig: Record<string, { label: string; color: string; bg: string; icon: React.ElementType }> = {
   pending: { label: "Pending", color: "text-amber-600", bg: "bg-amber-50", icon: Clock },

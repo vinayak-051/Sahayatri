@@ -120,7 +120,7 @@ const GuideDetail = () => {
         destination: guide.city || "TBD",
         date: bookingDate,
         people: bookingPeople,
-        amount: guide.rate_per_day ?? 0,
+        amount: (guide.rate_per_day ?? 0) * bookingPeople,
       });
       if (error) {
         toast.error(error.message || "Failed to book guide");
@@ -380,9 +380,9 @@ const GuideDetail = () => {
                 </div>
 
                 <div className="flex items-center justify-between bg-white/5 rounded-xl px-4 py-3">
-                  <span className="text-xs text-white/60">Total</span>
+                  <span className="text-xs text-white/60">Total ({bookingPeople} {bookingPeople === 1 ? "person" : "people"})</span>
                   <span className="text-sm font-bold text-white">
-                    {guide.rate_per_day != null ? `₹${guide.rate_per_day.toLocaleString()}` : "To be discussed with guide"}
+                    {guide.rate_per_day != null ? `₹${(guide.rate_per_day * bookingPeople).toLocaleString()}` : "To be discussed with guide"}
                   </span>
                 </div>
 

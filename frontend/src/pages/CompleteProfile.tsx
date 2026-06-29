@@ -43,7 +43,7 @@ const CompleteProfile = () => {
 
   const onSubmit = async (values: FormValues) => {
     if (!user) return;
-    if (!presetRole && role === "guide" && !values.city) {
+    if (role === "guide" && !values.city) {
       toast.error("City / region is required for guides");
       return;
     }
@@ -131,7 +131,7 @@ const CompleteProfile = () => {
               </div>
             )}
 
-            {!presetRole && role === "guide" && (
+            {role === "guide" && (
               <>
                 <div>
                   <div className="relative">

@@ -26,6 +26,7 @@ const LocationDetail = () => {
   const [requestPeople, setRequestPeople] = useState(1);
   const [requesting, setRequesting] = useState(false);
   const [myRequestStatus, setMyRequestStatus] = useState<BookingStatus | null>(null);
+  const [isSaved, setIsSaved] = useState(false);
   const [reviews, setReviews] = useState<LocationReview[]>([]);
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [myRating, setMyRating] = useState(0);
@@ -75,7 +76,7 @@ const LocationDetail = () => {
       supabase
         .from("locations")
         .select("*, guide:profiles!locations_guide_id_fkey(id, name, profile_photo_url, city, rating)")
-        .ilike("title", title)
+        .ilike("title", `%${title}%`)
         .neq("id", id)
         .eq("status", "active"),
       supabase
@@ -155,7 +156,7 @@ const LocationDetail = () => {
   }, [user, location, fetchMyRequest]);
 
   const handleSave = async () => {
-    if (!location) return;
+    if (!location || isSaved) return;
     const { error } = await supabase
       .from("locations")
       .update({ saves_count: (location.saves_count || 0) + 1 })
@@ -164,6 +165,7 @@ const LocationDetail = () => {
       toast.error("Couldn't save this spot right now.");
       return;
     }
+    setIsSaved(true);
     setLocation({ ...location, saves_count: (location.saves_count || 0) + 1 });
     toast.success("Saved to your favorites!");
   };
@@ -273,20 +275,31 @@ const LocationDetail = () => {
 
   return (
     <div className="min-h-screen gradient-sky pb-28 text-foreground">
-      <div className="relative h-[32vh]">
-        {location.photos?.[0] ? (
-          <img src={location.photos[0]} alt={location.title} loading="lazy" className="absolute inset-0 w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+      <div className="relative h-[32vh] overflow-hidden">
+        {location.photos?.length > 0 ? (
+          <div className="absolute inset-0 flex overflow-x-auto snap-x snap-mandatory scrollbar-hide">
+            {location.photos.map((photo, idx) => (
+              <div key={idx} className="relative flex-shrink-0 w-full h-full snap-start">
+                <img src={photo} alt={`${location.title} ${idx + 1}`} loading={idx === 0 ? "eager" : "lazy"} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+              </div>
+            ))}
+          </div>
         ) : (
           <div className="absolute inset-0 bg-primary/20" />
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/10" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/10 pointer-events-none" />
         <button aria-label="Go back" onClick={() => navigate("/explore")} className="absolute top-6 left-6 z-10 p-2 glass rounded-full shadow-card active:scale-95 transition-transform">
           <ArrowLeft size={20} className="text-foreground" />
         </button>
-        <button aria-label="Save to favorites" onClick={handleSave} className="absolute top-6 right-6 z-10 p-2 glass rounded-full shadow-card active:scale-95 transition-transform">
-          <Bookmark size={18} className="text-foreground" />
+        <button aria-label="Save to favorites" onClick={handleSave} disabled={isSaved} className="absolute top-6 right-6 z-10 p-2 glass rounded-full shadow-card active:scale-95 transition-transform disabled:opacity-60">
+          <Bookmark size={18} className={isSaved ? "text-accent fill-accent" : "text-foreground"} />
         </button>
-        <div className="absolute inset-0 flex flex-col justify-end p-6">
+        {location.photos?.length > 1 && (
+          <div className="absolute bottom-20 right-4 z-10 px-2 py-1 rounded-full bg-black/50 text-[10px] text-white font-medium">
+            {location.photos.length} photos
+          </div>
+        )}
+        <div className="absolute inset-0 flex flex-col justify-end p-6 pointer-events-none">
           <span className="text-[10px] font-extrabold uppercase tracking-wider text-white/80 bg-black/30 self-start px-2.5 py-1 rounded-full mb-2">
             {location.category}
           </span>

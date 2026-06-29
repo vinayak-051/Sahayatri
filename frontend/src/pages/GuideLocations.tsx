@@ -60,8 +60,12 @@ const GuideLocations = () => {
     lng: "78.9629",
     category: "Nature",
     safetyLevel: "moderate",
+    difficulty: "easy",
+    tags: "",
+    bestVisitingTime: "",
   });
   const [files, setFiles] = useState<FileList | null>(null);
+  const [existingPhotos, setExistingPhotos] = useState<string[]>([]);
   const [reportsByLocation, setReportsByLocation] = useState<Record<string, Report[]>>({});
   const [expandedReports, setExpandedReports] = useState<string | null>(null);
   const [placeQuery, setPlaceQuery] = useState("");
@@ -72,7 +76,7 @@ const GuideLocations = () => {
     if (!placeQuery.trim()) return;
     setSearchingPlace(true);
     try {
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(placeQuery)}&format=json&limit=5`);
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(placeQuery)}&format=json&limit=5`, { headers: { "User-Agent": "SahayatriJourneys/1.0 (contact@sahayatri.dev)" } });
       const data = await res.json();
       setPlaceResults(data);
       if (data.length === 0) toast.error("No places found for that search");
@@ -167,8 +171,12 @@ const GuideLocations = () => {
       lng: String(loc.lng),
       category: loc.category,
       safetyLevel: loc.safety_level,
+      difficulty: loc.difficulty || "easy",
+      tags: loc.tags?.join(", ") || "",
+      bestVisitingTime: loc.best_visiting_time || "",
     });
     setFiles(null);
+    setExistingPhotos(loc.photos || []);
     setShowAddForm(true);
   };
 
@@ -187,6 +195,7 @@ const GuideLocations = () => {
     setShowAddForm(false);
     setEditingId(null);
     setFiles(null);
+    setExistingPhotos([]);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -195,7 +204,7 @@ const GuideLocations = () => {
     setSaving(true);
     try {
       const existing = editingId ? locations.find((l) => l.id === editingId) : undefined;
-      const photos: string[] = [...(existing?.photos || [])];
+      const photos: string[] = editingId ? [...existingPhotos] : [];
       const videos: string[] = [...(existing?.videos || [])];
       if (files) {
         for (const file of Array.from(files)) {
@@ -222,6 +231,9 @@ const GuideLocations = () => {
         price_per_person: formData.cost ? Number(formData.cost) : null,
         timings: formData.days ? `${formData.days} day(s)` : null,
         safety_level: formData.safetyLevel,
+        difficulty: formData.difficulty,
+        tags: formData.tags ? formData.tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
+        best_visiting_time: formData.bestVisitingTime || null,
         photos,
         videos,
       };
@@ -308,6 +320,17 @@ const GuideLocations = () => {
               </select>
             </div>
 
+            <div className="grid grid-cols-2 gap-3">
+              <select className="w-full glass rounded-xl px-4 py-3 text-sm" value={formData.difficulty} onChange={(e) => setFormData({ ...formData, difficulty: e.target.value })}>
+                <option value="easy">Easy</option>
+                <option value="moderate">Moderate</option>
+                <option value="hard">Hard</option>
+              </select>
+              <input type="text" placeholder="Best time to visit" className="w-full glass rounded-xl px-4 py-3 text-sm" value={formData.bestVisitingTime} onChange={(e) => setFormData({ ...formData, bestVisitingTime: e.target.value })} />
+            </div>
+
+            <input type="text" placeholder="Tags (comma separated, e.g. waterfall, trekking, sunset)" className="w-full glass rounded-xl px-4 py-3 text-sm" value={formData.tags} onChange={(e) => setFormData({ ...formData, tags: e.target.value })} />
+
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground">Search a place, or tap on the map to set this location's position</p>
               <div className="flex gap-2">
@@ -346,9 +369,28 @@ const GuideLocations = () => {
               <p className="text-[10px] text-muted-foreground text-right">{parseFloat(formData.lat).toFixed(4)}, {parseFloat(formData.lng).toFixed(4)}</p>
             </div>
 
+            {existingPhotos.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">Current Photos ({existingPhotos.length})</p>
+                <div className="flex flex-wrap gap-2">
+                  {existingPhotos.map((url, idx) => (
+                    <div key={idx} className="relative w-20 h-20 rounded-xl overflow-hidden">
+                      <img src={url} alt={`photo ${idx + 1}`} className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setExistingPhotos((prev) => prev.filter((_, i) => i !== idx))}
+                        className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/70 flex items-center justify-center"
+                      >
+                        <X size={10} className="text-white" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="border border-dashed border-primary/50 rounded-xl p-4 flex flex-col items-center gap-2">
               <ImageIcon className="text-primary/50" />
-              <p className="text-xs text-muted-foreground text-center">Upload Photos</p>
+              <p className="text-xs text-muted-foreground text-center">Upload New Photos</p>
               <input type="file" multiple accept="image/*" onChange={(e) => handleFilesChange(e.target.files)} className="text-xs" />
             </div>
 

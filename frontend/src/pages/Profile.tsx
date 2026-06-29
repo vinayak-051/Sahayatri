@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronRight, Map, Shield, LogOut, Compass, User, Camera, X, Check, Lock, MapPin, Globe, Briefcase, FileText, Lightbulb, ShieldCheck } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -30,6 +30,7 @@ const Profile = () => {
   const [editPassword, setEditPassword] = useState("");
   const [editPhoto, setEditPhoto] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(user?.profile_photo_url || null);
+  useEffect(() => { setPreviewUrl(user?.profile_photo_url || null); }, [user?.profile_photo_url]);
 
   const [editCity, setEditCity] = useState(user?.city || "");
   const [editLanguages, setEditLanguages] = useState(user?.languages?.join(", ") || "");

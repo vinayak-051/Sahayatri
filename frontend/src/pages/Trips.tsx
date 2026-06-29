@@ -63,7 +63,7 @@ const Trips = () => {
     }
   };
 
-  const isTripConcluded = (bookingDate: string) => new Date(bookingDate) < new Date();
+  const isTripConcluded = (bookingDate: string) => bookingDate < new Date().toISOString().slice(0, 10);
 
   const handleCancelBooking = (bookingId: string) => {
     toast("Cancel this trip request?", {

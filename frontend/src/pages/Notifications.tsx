@@ -14,6 +14,25 @@ const ICONS: Record<NotificationType, { icon: typeof Calendar; color: string }> 
   new_message: { icon: MessageCircle, color: "gradient-primary" },
 };
 
+function getNotificationPath(n: AppNotification, isGuide: boolean): string | null {
+  switch (n.type) {
+    case "booking_requested": return "/guide-bookings";
+    case "booking_accepted":
+    case "booking_declined":
+    case "booking_cancelled": return "/trips";
+    case "new_message": {
+      const senderId = n.data?.sender_id as string | undefined;
+      const senderName = n.data?.sender_name as string | undefined;
+      if (senderId) {
+        const base = isGuide ? "/guide-messages" : "/messages";
+        return `${base}?userId=${senderId}${senderName ? `&userName=${encodeURIComponent(senderName)}` : ""}`;
+      }
+      return isGuide ? "/guide-messages" : "/messages";
+    }
+    default: return null;
+  }
+}
+
 const Notifications = () => {
   const navigate = useNavigate();
   const { user, isGuide } = useAuth();
@@ -48,7 +67,11 @@ const Notifications = () => {
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${user.id}` },
-        (payload) => setNotifications((prev) => [payload.new as AppNotification, ...prev])
+        async (payload) => {
+          const n = payload.new as AppNotification;
+          setNotifications((prev) => [n, ...prev]);
+          await supabase.from("notifications").update({ is_read: true }).eq("id", n.id);
+        }
       )
       .subscribe();
 
@@ -72,13 +95,15 @@ const Notifications = () => {
         ) : notifications.length > 0 ? (
           notifications.map((n, i) => {
             const { icon: Icon, color } = ICONS[n.type] ?? { icon: Bell, color: "gradient-primary" };
+            const path = getNotificationPath(n, isGuide);
             return (
               <motion.div
                 key={n.id}
                 initial={{ x: -20, opacity: 0 }}
                 animate={{ x: 0, opacity: 1 }}
                 transition={{ delay: i * 0.05 }}
-                className="glass rounded-2xl p-4 shadow-card flex items-start gap-3"
+                onClick={() => path && navigate(path)}
+                className={`glass rounded-2xl p-4 shadow-card flex items-start gap-3 ${path ? "cursor-pointer active:scale-[0.98] transition-transform" : ""}`}
               >
                 <div className={`w-10 h-10 rounded-xl ${color} flex items-center justify-center flex-shrink-0 mt-0.5`}>
                   <Icon size={16} className="text-primary-foreground" />

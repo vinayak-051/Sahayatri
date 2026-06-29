@@ -330,13 +330,15 @@ const GuideProfile = () => {
               </div>
               <form onSubmit={handleUpdateProfile} className="space-y-4">
                 {[
-                  { label: "Full Name", key: "name", placeholder: "Your name" },
-                  { label: "Languages (comma separated)", key: "languages", placeholder: "English, Hindi, Telugu" },
+                  { label: "Full Name", key: "name", placeholder: "Your name", required: true },
+                  { label: "City / Region", key: "city", placeholder: "e.g. Jaipur, Goa", required: false },
+                  { label: "Languages (comma separated)", key: "languages", placeholder: "English, Hindi, Telugu", required: false },
+                  { label: "Specialization", key: "specialization", placeholder: "e.g. Cultural, Adventure, Food", required: false },
                 ].map((f) => (
                   <div key={f.key} className="space-y-1">
                     <label className="text-[10px] uppercase font-bold text-white/40 ml-1">{f.label}</label>
                     <input
-                      required={f.key === "name"}
+                      required={f.required}
                       type="text"
                       value={formData[f.key as keyof typeof formData]}
                       onChange={(e) => setFormData({ ...formData, [f.key]: e.target.value })}
@@ -345,6 +347,28 @@ const GuideProfile = () => {
                     />
                   </div>
                 ))}
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-white/40 ml-1">Rate Per Day (₹)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={100000}
+                    value={formData.ratePerDay}
+                    onChange={(e) => setFormData({ ...formData, ratePerDay: e.target.value })}
+                    placeholder="e.g. 2000"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white outline-none placeholder:text-white/30"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-white/40 ml-1">Bio</label>
+                  <textarea
+                    value={formData.bio}
+                    onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
+                    placeholder="Tell travelers about yourself..."
+                    rows={3}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white outline-none placeholder:text-white/30 resize-none"
+                  />
+                </div>
                 <button type="submit" disabled={editing} className="w-full py-4 rounded-xl gradient-primary text-white font-bold shadow-glow mt-4 active:scale-95 transition-transform disabled:opacity-50">
                   {editing ? "Saving..." : "Save Profile"}
                 </button>

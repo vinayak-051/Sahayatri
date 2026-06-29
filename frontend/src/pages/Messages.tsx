@@ -24,6 +24,7 @@ const Messages = () => {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -198,13 +199,13 @@ const Messages = () => {
       <div className="px-6 mb-6">
         <div className="glass rounded-2xl px-4 py-3 flex items-center gap-3 shadow-card border border-primary/5">
           <Search size={18} className="text-muted-foreground" />
-          <input placeholder="Search guides or buddies..." className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none" />
+          <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search guides or buddies..." className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none" />
         </div>
       </div>
 
       <div className="px-6 space-y-2">
-        {conversations.length > 0 ? (
-          conversations.map((c, i) => (
+        {conversations.filter((c) => !searchQuery || c.userName.toLowerCase().includes(searchQuery.toLowerCase())).length > 0 ? (
+          conversations.filter((c) => !searchQuery || c.userName.toLowerCase().includes(searchQuery.toLowerCase())).map((c, i) => (
             <motion.button
               key={c.userId}
               initial={{ x: -20, opacity: 0 }}

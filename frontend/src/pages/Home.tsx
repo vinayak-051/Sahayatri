@@ -170,7 +170,7 @@ const Home = () => {
 
           {searchResults.guides.length === 0 && searchResults.buddyTrips.length === 0 && (
             <div className="text-center py-8 glass rounded-2xl">
-              <p className="text-sm text-muted-foreground">No verified members found for "{searchResults.query}"</p>
+              <p className="text-sm text-muted-foreground">No results found for "{searchResults.query}"</p>
             </div>
           )}
         </div>

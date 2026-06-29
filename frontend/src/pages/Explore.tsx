@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { Search, MapPin, Compass } from "lucide-react";
 import BottomNav from "@/components/BottomNav";
@@ -24,6 +24,8 @@ type PriceFilter = "all" | "under500" | "500to2000" | "above2000";
 const Explore = () => {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [priceFilter, setPriceFilter] = useState<PriceFilter>("all");
   const [locations, setLocations] = useState<Location[]>([]);
@@ -53,6 +55,7 @@ const Explore = () => {
     if (priceFilter === "under500") query = query.lt("price_per_person", 500);
     if (priceFilter === "500to2000") query = query.gte("price_per_person", 500).lte("price_per_person", 2000);
     if (priceFilter === "above2000") query = query.gt("price_per_person", 2000);
+    if (debouncedSearch.trim()) query = query.or(`title.ilike.%${debouncedSearch.trim()}%,tags.cs.{${debouncedSearch.trim()}}`);
 
     const { data, error } = await query;
     if (error) {
@@ -70,12 +73,9 @@ const Explore = () => {
     setOffset(0);
     setHasMore(true);
     fetchLocations(true);
-  }, [selectedCategory, priceFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedCategory, priceFilter, debouncedSearch]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const filteredItems = locations.filter((loc) => {
-    const haystack = [loc.title, loc.guide?.city ?? "", ...(loc.tags ?? [])].join(" ").toLowerCase();
-    return haystack.includes(search.toLowerCase());
-  });
+  const filteredItems = locations;
 
   return (
     <div className="min-h-screen gradient-sky pb-24 text-foreground">
@@ -89,7 +89,11 @@ const Explore = () => {
           <Search size={22} className="text-primary/80 shrink-0" />
           <input
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              if (searchTimer.current) clearTimeout(searchTimer.current);
+              searchTimer.current = setTimeout(() => setDebouncedSearch(e.target.value), 400);
+            }}
             placeholder="Search spots, cities, tags..."
             className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground/80 focus:outline-none"
           />

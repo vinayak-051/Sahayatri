@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
@@ -32,7 +32,13 @@ const GuideAuth = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const { login, register: registerAccount, loginWithGoogle } = useAuth();
+  const { user, login, register: registerAccount, loginWithGoogle } = useAuth();
+
+  useEffect(() => {
+    if (user?.is_admin) navigate("/admin");
+    else if (user?.role === "guide") navigate("/guide-dashboard");
+    else if (user?.role === "traveler") navigate("/home");
+  }, [user, navigate]);
 
   const {
     register,
