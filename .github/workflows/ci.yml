@@ -17,22 +17,23 @@ jobs:
         with:
           node-version: 20
           cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
-        run: npm install --workspace=frontend
+        working-directory: frontend
+        run: npm ci
 
       - name: Lint
-        run: npm run lint --workspace=frontend
+        working-directory: frontend
+        run: npm run lint
 
       - name: Unit tests
-        run: npm run test --workspace=frontend
+        working-directory: frontend
+        run: npm run test
 
       - name: Build
-        # A successful build is the equivalent of the old "does the server boot"
-        # smoke test now that there's no Express backend — a broken import or
-        # type error here fails the build the same way a MODULE_NOT_FOUND used
-        # to crash the server on boot.
+        working-directory: frontend
         env:
           VITE_SUPABASE_URL: https://placeholder.supabase.co
           VITE_SUPABASE_ANON_KEY: placeholder-anon-key
-        run: npm run build --workspace=frontend
+        run: npm run build
