@@ -4,7 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 
 interface ProtectedRouteProps {
   children: ReactNode;
-  role?: "traveler" | "guide" | "any";
+  role?: "traveler" | "guide" | "any" | "admin";
 }
 
 const ProtectedRoute = ({ children, role = "any" }: ProtectedRouteProps) => {
@@ -33,7 +33,11 @@ const ProtectedRoute = ({ children, role = "any" }: ProtectedRouteProps) => {
     return <Navigate to="/complete-profile" replace />;
   }
 
-  if (role !== "any" && user.role !== role) {
+  if (role === "admin" && !user.is_admin) {
+    return <Navigate to={user.role === "guide" ? "/guide-dashboard" : "/home"} replace />;
+  }
+
+  if (role !== "any" && role !== "admin" && user.role !== role) {
     return <Navigate to={user.role === "guide" ? "/guide-dashboard" : "/home"} replace />;
   }
 

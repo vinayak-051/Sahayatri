@@ -88,7 +88,7 @@ const App = () => (
               <Route path="/guide-locations" element={<ProtectedRoute role="guide"><GuideLocations /></ProtectedRoute>} />
 
               {/* Admin */}
-              <Route path="/admin" element={<ProtectedRoute role="any"><AdminDashboard /></ProtectedRoute>} />
+              <Route path="/admin" element={<ProtectedRoute role="admin"><AdminDashboard /></ProtectedRoute>} />
 
               <Route path="*" element={<NotFound />} />
             </Routes>
