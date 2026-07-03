@@ -4,7 +4,6 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { toast } from "sonner";
 import { Mail, ArrowLeft } from "lucide-react";
 import heroImg from "@/assets/hero-travel.jpg";
 import { supabase } from "@/lib/supabaseClient";
