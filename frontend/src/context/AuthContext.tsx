@@ -163,9 +163,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (session?.user) await fetchProfile(session.user.id);
   };
 
+  const userId = user?.id;
   useEffect(() => {
-    if (user) subscribeToPush(user.id);
-  }, [user?.id]);
+    if (userId) subscribeToPush(userId);
+  }, [userId]);
 
   return (
     <AuthContext.Provider

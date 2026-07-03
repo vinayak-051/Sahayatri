@@ -24,7 +24,7 @@ const LocationPicker = ({ lat, lng, onPick }: { lat: number; lng: number; onPick
     useMapEvents({ click: (e) => onPick(e.latlng.lat, e.latlng.lng) });
     return null;
   };
-  const Recenter = () => {
+  const Recenter = ({ lat, lng }: { lat: number; lng: number }) => {
     const map = useMap();
     useEffect(() => {
       map.setView([lat, lng]);
@@ -35,7 +35,7 @@ const LocationPicker = ({ lat, lng, onPick }: { lat: number; lng: number; onPick
     <MapContainer center={[lat, lng]} zoom={5} style={{ height: "200px", width: "100%", borderRadius: "0.75rem" }}>
       <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
       <ClickHandler />
-      <Recenter />
+      <Recenter lat={lat} lng={lng} />
       <Marker position={[lat, lng]} icon={pickerIcon} />
     </MapContainer>
   );

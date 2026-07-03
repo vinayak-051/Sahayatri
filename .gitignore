@@ -3,3 +3,8 @@ node_modules/
 .env.local
 *.log
 dist/
+
+# Test & debug artifacts
+test-results/
+playwright-report/
+*.har
