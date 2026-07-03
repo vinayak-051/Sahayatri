@@ -135,7 +135,6 @@ function StatCard({ label, value, color, icon, onClick }: { label: string; value
         <p className="text-xl font-bold">{value.toLocaleString("en-IN")}</p>
       </div>
       <p className="text-[10px] text-muted-foreground">{label}</p>
-      {onClick && <p className="text-[9px] text-primary mt-0.5">Tap to view →</p>}
     </button>
   );
 }

@@ -32,18 +32,6 @@ const ForgotPassword = () => {
   const onSubmit = async ({ email }: FormValues) => {
     setLoading(true);
     try {
-      const { data } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("email", email)
-        .eq("role", role)
-        .maybeSingle();
-
-      if (!data) {
-        toast.error(`No ${role} account found with that email.`);
-        return;
-      }
-
       await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/reset-password`,
       });
