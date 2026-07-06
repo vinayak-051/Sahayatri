@@ -1,11 +1,14 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Calendar, MapPin, CheckCircle2, XCircle, AlertCircle, MessageSquare, Ban } from "lucide-react";
+import { Calendar, MapPin, CheckCircle2, XCircle, AlertCircle, MessageSquare, Ban, IndianRupee, Banknote } from "lucide-react";
 import { toast } from "sonner";
 import BottomNav from "@/components/BottomNav";
 import { supabase } from "@/lib/supabaseClient";
+import { openRazorpayCheckout, type RazorpayOrder } from "@/lib/razorpay";
 import { useAuth } from "@/context/AuthContext";
 import type { Booking } from "@/types/database";
+
+const halfAmount = (b: Booking) => Math.round(Number(b.amount) * 50) / 100;
 
 const Trips = () => {
   const { user } = useAuth();
@@ -13,6 +16,7 @@ const Trips = () => {
   const [loading, setLoading] = useState(true);
   const [feedbackInput, setFeedbackInput] = useState<{ [key: string]: string }>({});
   const [submittingFeedback, setSubmittingFeedback] = useState<string | null>(null);
+  const [payingBooking, setPayingBooking] = useState<string | null>(null);
 
   const fetchBookings = useCallback(async () => {
     if (!user) return;
@@ -47,16 +51,30 @@ const Trips = () => {
     };
   }, [user, fetchBookings]);
 
-  const handleFeedbackSubmit = async (bookingId: string, status: "completed" | "cancelled") => {
-    setSubmittingFeedback(bookingId);
-    const feedbackText = feedbackInput[bookingId] || "";
+  const handleFeedbackSubmit = async (booking: Booking, status: "completed" | "cancelled") => {
+    setSubmittingFeedback(booking.id);
+    const feedbackText = feedbackInput[booking.id] || "";
     try {
-      const { error } = await supabase.from("bookings").update({ status, feedback: feedbackText }).eq("id", bookingId);
-      if (error) {
-        toast.error("Failed to submit feedback.");
-        return;
+      // paid bookings can't be cancelled by a direct update (a refund must be
+      // issued), so route those through the payments Edge Function
+      if (status === "cancelled" && booking.status === "confirmed") {
+        const { data, error } = await supabase.functions.invoke("payments-api", {
+          body: { action: "cancel", booking_id: booking.id },
+        });
+        if (error || data?.error) {
+          toast.error(data?.error ?? "Failed to cancel trip");
+          return;
+        }
+        if (feedbackText) await supabase.from("bookings").update({ feedback: feedbackText }).eq("id", booking.id);
+        toast.success(`Trip cancelled. ₹${data.refund} will be refunded to your payment method.`);
+      } else {
+        const { error } = await supabase.from("bookings").update({ status, feedback: feedbackText }).eq("id", booking.id);
+        if (error) {
+          toast.error("Failed to submit feedback.");
+          return;
+        }
+        toast.success(`Trip marked as ${status}. Thank you!`);
       }
-      toast.success(`Trip marked as ${status}. Thank you!`);
       fetchBookings();
     } finally {
       setSubmittingFeedback(null);
@@ -65,17 +83,73 @@ const Trips = () => {
 
   const isTripConcluded = (bookingDate: string) => bookingDate < new Date().toISOString().slice(0, 10);
 
-  const handleCancelBooking = (bookingId: string) => {
-    toast("Cancel this trip request?", {
+  const startPayment = async (booking: Booking, stage: "advance" | "final") => {
+    setPayingBooking(booking.id);
+    try {
+      const { data, error } = await supabase.functions.invoke("payments-api", {
+        body: { action: "create_order", booking_id: booking.id, stage },
+      });
+      if (error || data?.error) {
+        toast.error(data?.error ?? "Could not start payment");
+        return;
+      }
+      await openRazorpayCheckout(data as RazorpayOrder, () => {
+        toast.success("Payment received! Confirming your booking…");
+        fetchBookings();
+      });
+    } catch {
+      toast.error("Could not open payment window");
+    } finally {
+      setPayingBooking(null);
+    }
+  };
+
+  const confirmCashPaid = (booking: Booking) => {
+    toast(`Confirm you paid ₹${halfAmount(booking)} in cash to ${booking.guide?.name ?? "your guide"}?`, {
+      action: {
+        label: "Yes, Paid",
+        onClick: async () => {
+          const { data, error } = await supabase.functions.invoke("payments-api", {
+            body: { action: "confirm_cash", booking_id: booking.id },
+          });
+          if (error || data?.error) {
+            toast.error(data?.error ?? "Could not record cash payment");
+            return;
+          }
+          toast.success("Cash payment recorded");
+          fetchBookings();
+        },
+      },
+    });
+  };
+
+  const handleCancelBooking = (booking: Booking) => {
+    const paid = booking.status === "confirmed";
+    toast(paid ? "Cancel this trip? Within 5 days of the trip date a 10% cancellation fee applies." : "Cancel this trip request?", {
       action: {
         label: "Cancel Trip",
         onClick: async () => {
-          const { error } = await supabase.from("bookings").update({ status: "cancelled" }).eq("id", bookingId);
-          if (error) {
-            toast.error("Failed to cancel trip");
-            return;
+          if (paid) {
+            const { data, error } = await supabase.functions.invoke("payments-api", {
+              body: { action: "cancel", booking_id: booking.id },
+            });
+            if (error || data?.error) {
+              toast.error(data?.error ?? "Failed to cancel trip");
+              return;
+            }
+            toast.success(
+              data.fee > 0
+                ? `Trip cancelled. ₹${data.refund} refunded (₹${data.fee} cancellation fee).`
+                : `Trip cancelled. ₹${data.refund} refunded in full.`
+            );
+          } else {
+            const { error } = await supabase.from("bookings").update({ status: "cancelled" }).eq("id", booking.id);
+            if (error) {
+              toast.error("Failed to cancel trip");
+              return;
+            }
+            toast.success("Trip cancelled");
           }
-          toast.success("Trip cancelled");
           fetchBookings();
         },
       },
@@ -90,8 +164,8 @@ const Trips = () => {
     );
   }
 
-  const pendingFeedbackBookings = bookings.filter((b) => b.status === "accepted" && isTripConcluded(b.date));
-  const upcomingTrips = bookings.filter((b) => b.status === "accepted" && !isTripConcluded(b.date));
+  const pendingFeedbackBookings = bookings.filter((b) => (b.status === "accepted" || b.status === "confirmed") && isTripConcluded(b.date));
+  const upcomingTrips = bookings.filter((b) => (b.status === "accepted" || b.status === "confirmed") && !isTripConcluded(b.date));
   const completedTrips = bookings.filter((b) => b.status === "completed");
   const pendingApprovalTrips = bookings.filter((b) => b.status === "pending");
   const rejectedTrips = bookings.filter((b) => b.status === "declined");
@@ -127,37 +201,62 @@ const Trips = () => {
                     </div>
                   </div>
                   <div className="p-4 space-y-4">
-                    <p className="text-xs text-white/90 font-medium">
-                      Your scheduled trip on <strong className="text-accent">{new Date(b.date).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })}</strong> has concluded. Please confirm whether the trip was completed.
-                    </p>
-                    <div className="space-y-2.5">
-                      <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-3 py-2">
-                        <MessageSquare size={14} className="text-white/40 shrink-0" />
-                        <input
-                          type="text"
-                          value={feedbackInput[b.id] || ""}
-                          onChange={(e) => setFeedbackInput({ ...feedbackInput, [b.id]: e.target.value })}
-                          placeholder="Optional: How was the guide and trip?"
-                          className="w-full bg-transparent text-xs text-white placeholder:text-white/30 focus:outline-none"
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <button
-                          disabled={submittingFeedback === b.id}
-                          onClick={() => handleFeedbackSubmit(b.id, "completed")}
-                          className="gradient-primary text-primary-foreground font-bold py-2.5 rounded-xl text-xs active:scale-95 transition-transform flex items-center justify-center gap-1 shadow-glow hover:brightness-110"
-                        >
-                          <CheckCircle2 size={12} /> Yes, Completed
-                        </button>
-                        <button
-                          disabled={submittingFeedback === b.id}
-                          onClick={() => handleFeedbackSubmit(b.id, "cancelled")}
-                          className="glass border border-white/15 text-white font-bold py-2.5 rounded-xl text-xs active:scale-95 transition-transform flex items-center justify-center gap-1 hover:bg-white/10"
-                        >
-                          <XCircle size={12} /> No, Cancelled
-                        </button>
-                      </div>
-                    </div>
+                    {b.status === "confirmed" && !b.final_payment_mode ? (
+                      <>
+                        <p className="text-xs text-white/90 font-medium">
+                          Your trip on <strong className="text-accent">{new Date(b.date).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })}</strong> has concluded. Settle the remaining <strong className="text-accent">₹{halfAmount(b)}</strong> (final 50%) to finish up.
+                        </p>
+                        <div className="grid grid-cols-2 gap-3">
+                          <button
+                            disabled={payingBooking === b.id}
+                            onClick={() => startPayment(b, "final")}
+                            className="gradient-primary text-primary-foreground font-bold py-2.5 rounded-xl text-xs active:scale-95 transition-transform flex items-center justify-center gap-1 shadow-glow hover:brightness-110"
+                          >
+                            <IndianRupee size={12} /> Pay ₹{halfAmount(b)} Online
+                          </button>
+                          <button
+                            onClick={() => confirmCashPaid(b)}
+                            className="glass border border-white/15 text-white font-bold py-2.5 rounded-xl text-xs active:scale-95 transition-transform flex items-center justify-center gap-1 hover:bg-white/10"
+                          >
+                            <Banknote size={12} /> Paid Cash to Guide
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-xs text-white/90 font-medium">
+                          Your scheduled trip on <strong className="text-accent">{new Date(b.date).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })}</strong> has concluded. Please confirm whether the trip was completed.
+                        </p>
+                        <div className="space-y-2.5">
+                          <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-3 py-2">
+                            <MessageSquare size={14} className="text-white/40 shrink-0" />
+                            <input
+                              type="text"
+                              value={feedbackInput[b.id] || ""}
+                              onChange={(e) => setFeedbackInput({ ...feedbackInput, [b.id]: e.target.value })}
+                              placeholder="Optional: How was the guide and trip?"
+                              className="w-full bg-transparent text-xs text-white placeholder:text-white/30 focus:outline-none"
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <button
+                              disabled={submittingFeedback === b.id}
+                              onClick={() => handleFeedbackSubmit(b, "completed")}
+                              className="gradient-primary text-primary-foreground font-bold py-2.5 rounded-xl text-xs active:scale-95 transition-transform flex items-center justify-center gap-1 shadow-glow hover:brightness-110"
+                            >
+                              <CheckCircle2 size={12} /> Yes, Completed
+                            </button>
+                            <button
+                              disabled={submittingFeedback === b.id}
+                              onClick={() => handleFeedbackSubmit(b, "cancelled")}
+                              className="glass border border-white/15 text-white font-bold py-2.5 rounded-xl text-xs active:scale-95 transition-transform flex items-center justify-center gap-1 hover:bg-white/10"
+                            >
+                              <XCircle size={12} /> No, Cancelled
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </motion.div>
               ))}
@@ -174,7 +273,9 @@ const Trips = () => {
                   <div className="relative h-32 bg-secondary flex items-center justify-center">
                     <MapPin size={28} className="text-muted-foreground" />
                     <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-transparent to-transparent" />
-                    <div className="absolute top-3 right-3 gradient-accent px-3 py-0.5 rounded-full text-[8px] font-extrabold text-white uppercase tracking-wider shadow-sm">Upcoming</div>
+                    <div className="absolute top-3 right-3 gradient-accent px-3 py-0.5 rounded-full text-[8px] font-extrabold text-white uppercase tracking-wider shadow-sm">
+                      {t.status === "confirmed" ? "✓ Advance Paid" : "Upcoming"}
+                    </div>
                   </div>
                   <div className="p-4 flex items-center justify-between">
                     <div>
@@ -190,9 +291,18 @@ const Trips = () => {
                       <p className="text-xs font-extrabold text-foreground mt-0.5">{t.guide?.name}</p>
                     </div>
                   </div>
-                  <div className="px-4 pb-4">
+                  <div className="px-4 pb-4 space-y-2">
+                    {t.status === "accepted" && (
+                      <button
+                        disabled={payingBooking === t.id}
+                        onClick={() => startPayment(t, "advance")}
+                        className="w-full gradient-primary text-primary-foreground font-bold py-2.5 rounded-xl text-xs active:scale-95 transition-transform flex items-center justify-center gap-1.5 shadow-glow hover:brightness-110"
+                      >
+                        <IndianRupee size={12} /> Pay ₹{halfAmount(t)} Advance to Confirm
+                      </button>
+                    )}
                     <button
-                      onClick={() => handleCancelBooking(t.id)}
+                      onClick={() => handleCancelBooking(t)}
                       className="w-full py-2 rounded-xl bg-secondary border border-border text-xs font-medium text-destructive flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
                     >
                       <Ban size={12} /> Cancel Trip
@@ -253,7 +363,7 @@ const Trips = () => {
                   <div className="text-right flex flex-col items-end gap-1.5">
                     <span className="text-[8px] bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">Requested</span>
                     <p className="text-[10px] text-muted-foreground font-bold">₹{t.amount}</p>
-                    <button onClick={() => handleCancelBooking(t.id)} className="text-[10px] font-bold text-destructive">Cancel</button>
+                    <button onClick={() => handleCancelBooking(t)} className="text-[10px] font-bold text-destructive">Cancel</button>
                   </div>
                 </div>
               ))}

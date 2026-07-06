@@ -6,10 +6,11 @@ export type Role = "traveler" | "guide";
 export type LocationStatus = "active" | "draft" | "archived";
 export type SafetyLevel = "high" | "moderate" | "low";
 export type Difficulty = "easy" | "moderate" | "hard";
-export type BookingStatus = "pending" | "accepted" | "declined" | "completed" | "cancelled";
+export type BookingStatus = "pending" | "accepted" | "confirmed" | "declined" | "completed" | "cancelled";
+export type FinalPaymentMode = "online" | "cash";
 export type BuddyRequestStatus = "pending" | "accepted" | "rejected";
 export type ReportStatus = "open" | "reviewed" | "dismissed";
-export type NotificationType = "booking_requested" | "booking_accepted" | "booking_declined" | "booking_cancelled" | "new_message";
+export type NotificationType = "booking_requested" | "booking_accepted" | "booking_declined" | "booking_advance_paid" | "booking_cancelled" | "new_message";
 
 export interface Profile {
   id: string;
@@ -27,6 +28,7 @@ export interface Profile {
   is_available: boolean;
   is_verified: boolean;
   is_admin: boolean;
+  is_banned: boolean;
   onboarded: boolean;
   created_at: string;
 }
@@ -56,7 +58,7 @@ export interface Location {
   views_count: number;
   created_at: string;
   updated_at: string;
-  guide?: Pick<Profile, "id" | "name" | "profile_photo_url" | "city" | "rating" | "is_available">;
+  guide?: Pick<Profile, "id" | "name" | "profile_photo_url" | "city" | "rating" | "is_available" | "is_verified">;
 }
 
 export interface Booking {
@@ -68,6 +70,8 @@ export interface Booking {
   people: number;
   amount: number;
   status: BookingStatus;
+  final_payment_mode: FinalPaymentMode | null;
+  cancellation_fee: number;
   feedback: string;
   created_at: string;
   traveler?: Pick<Profile, "id" | "name" | "profile_photo_url">;
@@ -131,6 +135,22 @@ export interface Report {
   description: string | null;
   status: ReportStatus;
   created_at: string;
+}
+
+export type VerificationStatus = "pending" | "approved" | "rejected";
+export type VerificationDocumentType = "aadhaar" | "driving_license" | "passport" | "voter_id" | "other";
+
+export interface VerificationRequest {
+  id: string;
+  guide_id: string;
+  document_type: VerificationDocumentType;
+  document_path: string;
+  status: VerificationStatus;
+  admin_note: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  guide?: Pick<Profile, "id" | "name" | "email" | "city" | "profile_photo_url">;
 }
 
 export interface GuideRatingStats {

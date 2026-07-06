@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Star, TrendingUp, Users, MapPin, Calendar, IndianRupee, ChevronRight, Bell, Check, X } from "lucide-react";
+import { Star, TrendingUp, Users, MapPin, Calendar, IndianRupee, ChevronRight, Bell, Check, X, ArrowDownCircle, ArrowUpCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import GuideBottomNav from "@/components/GuideBottomNav";
@@ -15,21 +15,24 @@ const GuideDashboard = () => {
   const unreadCount = useUnreadNotifications();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [avgRating, setAvgRating] = useState<number | null>(null);
+  const [ledger, setLedger] = useState<{ id: string; type: string; amount: number; created_at: string; booking_id: string | null }[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async (silent = false) => {
     if (!user) return;
     if (!silent) setLoading(true);
-    const [{ data: bookingsData }, { data: ratingData }] = await Promise.all([
+    const [{ data: bookingsData }, { data: ratingData }, { data: ledgerData }] = await Promise.all([
       supabase
         .from("bookings")
         .select("*, traveler:profiles!bookings_traveler_id_fkey(id, name, profile_photo_url)")
         .eq("guide_id", user.id)
         .order("created_at", { ascending: false }),
       supabase.from("guide_rating_stats").select("avg_rating").eq("guide_id", user.id).maybeSingle(),
+      supabase.from("guide_ledger").select("id, type, amount, created_at, booking_id").eq("guide_id", user.id).order("created_at", { ascending: false }).limit(30),
     ]);
     setBookings((bookingsData ?? []) as Booking[]);
     setAvgRating(ratingData?.avg_rating ?? null);
+    setLedger(ledgerData ?? []);
     setLoading(false);
   }, [user]);
 
@@ -54,7 +57,7 @@ const GuideDashboard = () => {
     const status = action === "accept" ? "accepted" : "declined";
     if (action === "accept") {
       const target = bookings.find((b) => b.id === id);
-      const conflict = bookings.find((b) => b.id !== id && b.status === "accepted" && b.date === target?.date);
+      const conflict = bookings.find((b) => b.id !== id && (b.status === "accepted" || b.status === "confirmed") && b.date === target?.date);
       if (conflict) {
         toast.error(`You already have an accepted trip on ${new Date(target!.date).toLocaleDateString()}.`);
         return;
@@ -70,15 +73,17 @@ const GuideDashboard = () => {
   };
 
   const pendingBookings = bookings.filter((b) => b.status === "pending");
-  const acceptedBookings = bookings.filter((b) => b.status === "accepted");
+  const acceptedBookings = bookings.filter((b) => b.status === "accepted" || b.status === "confirmed");
   const completedBookings = bookings.filter((b) => b.status === "completed");
   const totalEarnings = completedBookings.reduce((sum, b) => sum + Number(b.amount || 0), 0);
+  const ledgerBalance = ledger.reduce((sum, r) => sum + Number(r.amount), 0);
+  const pendingPayout = Math.max(0, ledgerBalance);
 
   const statCards = [
     { icon: Users, label: "Tourists Served", value: String(completedBookings.length), color: "gradient-primary" },
     { icon: Star, label: "Rating", value: avgRating ? avgRating.toFixed(1) : "New", color: "gradient-accent" },
     { icon: IndianRupee, label: "Total Earnings", value: `₹${totalEarnings.toLocaleString()}`, color: "gradient-primary" },
-    { icon: Calendar, label: "Total Trips", value: String(bookings.length), color: "gradient-accent" },
+    { icon: IndianRupee, label: "Pending Payout", value: `₹${pendingPayout.toLocaleString()}`, color: "gradient-accent" },
   ];
 
   if (loading) return <div className="min-h-screen flex items-center justify-center gradient-sky"><div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" /></div>;
@@ -182,6 +187,41 @@ const GuideDashboard = () => {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Earnings Ledger */}
+      <div className="px-6 mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold">Earnings History</h2>
+          <span className="text-xs text-muted-foreground">Payout due: <strong className="text-foreground">₹{pendingPayout.toLocaleString()}</strong></span>
+        </div>
+        {ledger.length === 0 ? (
+          <div className="text-center py-8 glass rounded-2xl opacity-50">
+            <p className="text-xs">No earnings yet — complete trips to see your ledger.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {ledger.map((row) => {
+              const credit = Number(row.amount) >= 0;
+              return (
+                <div key={row.id} className="glass rounded-2xl px-4 py-3 flex items-center gap-3 shadow-card">
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${credit ? "bg-green-500/10" : "bg-red-500/10"}`}>
+                    {credit
+                      ? <ArrowDownCircle size={16} className="text-green-500" />
+                      : <ArrowUpCircle size={16} className="text-red-500" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold capitalize">{row.type}</p>
+                    <p className="text-[10px] text-muted-foreground">{new Date(row.created_at).toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" })}</p>
+                  </div>
+                  <span className={`text-sm font-bold ${credit ? "text-green-500" : "text-red-500"}`}>
+                    {credit ? "+" : ""}₹{Math.abs(Number(row.amount)).toLocaleString()}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <GuideBottomNav />

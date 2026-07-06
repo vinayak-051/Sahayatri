@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import {
   ArrowLeft, CheckCircle, XCircle, User, MapPin, Star, Search, RefreshCw,
   Users, TrendingUp, Calendar, Package, ChevronDown, ChevronUp, LogOut,
+  FileText, Flag, Ban, Archive, IndianRupee,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -12,12 +13,29 @@ import {
 } from "recharts";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/context/AuthContext";
-import type { Profile } from "@/types/database";
+import type { Profile, VerificationRequest } from "@/types/database";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type AdminTab = "overview" | "guides" | "bookings" | "buddy" | "analytics";
+type AdminTab = "overview" | "guides" | "verifications" | "reports" | "bookings" | "buddy" | "analytics" | "payouts";
 type GuideFilter = "unverified" | "verified" | "all";
+
+interface ReportRow {
+  id: string;
+  reason: string;
+  status: string;
+  created_at: string;
+  location: { id: string; title: string; status: string; guide_id: string; guide: { id: string; name: string; is_banned: boolean } | null } | null;
+  reporter: { id: string; name: string } | null;
+}
+
+const DOC_TYPE_LABELS: Record<string, string> = {
+  aadhaar: "Aadhaar Card",
+  driving_license: "Driving License",
+  passport: "Passport",
+  voter_id: "Voter ID",
+  other: "Other Govt. ID",
+};
 
 interface BookingRow {
   id: string;
@@ -181,6 +199,16 @@ const AdminDashboard = () => {
   const [search, setSearch] = useState("");
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
+  // Verifications
+  const [verifRequests, setVerifRequests] = useState<VerificationRequest[]>([]);
+  const [verifFilter, setVerifFilter] = useState<"pending" | "all">("pending");
+  const [reviewingId, setReviewingId] = useState<string | null>(null);
+
+  // Reports
+  const [reports, setReports] = useState<ReportRow[]>([]);
+  const [reportFilter, setReportFilter] = useState<"open" | "all">("open");
+  const [actioningReportId, setActioningReportId] = useState<string | null>(null);
+
   // Bookings
   const [bookings, setBookings] = useState<BookingRow[]>([]);
   const [bookingFilter, setBookingFilter] = useState("all");
@@ -193,6 +221,55 @@ const AdminDashboard = () => {
   const [travelers, setTravelers] = useState<TravelerRow[]>([]);
   const [travelersLoading, setTravelersLoading] = useState(false);
   const [overviewDetail, setOverviewDetail] = useState<string | null>(null);
+
+  // Payouts
+  interface PayoutRow {
+    guide_id: string;
+    guide_name: string;
+    balance: number;
+  }
+  const [payouts, setPayouts] = useState<PayoutRow[]>([]);
+  const [payoutsLoading, setPayoutsLoading] = useState(false);
+  const [markingPayout, setMarkingPayout] = useState<string | null>(null);
+
+  const fetchPayouts = useCallback(async () => {
+    setPayoutsLoading(true);
+    const { data } = await supabase
+      .from("guide_ledger")
+      .select("guide_id, amount, profiles:guide_id(name)");
+    if (data) {
+      const map: Record<string, { guide_name: string; balance: number }> = {};
+      for (const row of data) {
+        const id = row.guide_id as string;
+        const name = (row.profiles as { name: string } | null)?.name ?? "Unknown";
+        if (!map[id]) map[id] = { guide_name: name, balance: 0 };
+        map[id].balance += Number(row.amount);
+      }
+      setPayouts(
+        Object.entries(map)
+          .map(([guide_id, v]) => ({ guide_id, ...v }))
+          .filter((r) => r.balance > 0)
+          .sort((a, b) => b.balance - a.balance)
+      );
+    }
+    setPayoutsLoading(false);
+  }, []);
+
+  const markPaid = async (guide_id: string, balance: number) => {
+    setMarkingPayout(guide_id);
+    const { error } = await supabase.from("guide_ledger").insert({
+      guide_id,
+      type: "payout",
+      amount: -balance,
+    });
+    if (error) {
+      toast.error("Failed to record payout");
+    } else {
+      toast.success(`Payout of ₹${balance.toLocaleString()} recorded`);
+      fetchPayouts();
+    }
+    setMarkingPayout(null);
+  };
 
   // Overview & Analytics
   const [stats, setStats] = useState<OverviewStats | null>(null);
@@ -266,6 +343,107 @@ const AdminDashboard = () => {
     setLoading(false);
   }, [guideFilter, search]);
 
+  const fetchVerifications = useCallback(async () => {
+    setLoading(true);
+    let query = supabase
+      .from("verification_requests")
+      .select("*, guide:profiles!verification_requests_guide_id_fkey(id, name, email, city, profile_photo_url)")
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (verifFilter === "pending") query = query.eq("status", "pending");
+    const { data, error } = await query;
+    if (error) toast.error("Failed to load verification requests");
+    else setVerifRequests((data ?? []) as unknown as VerificationRequest[]);
+    setLoading(false);
+  }, [verifFilter]);
+
+  const fetchReports = useCallback(async () => {
+    setLoading(true);
+    let query = supabase
+      .from("reports")
+      .select(`
+        id, reason, status, created_at,
+        location:locations(id, title, status, guide_id, guide:profiles!locations_guide_id_fkey(id, name, is_banned)),
+        reporter:profiles!reports_reported_by_fkey(id, name)
+      `)
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (reportFilter === "open") query = query.eq("status", "open");
+    const { data, error } = await query;
+    if (error) toast.error("Failed to load reports");
+    else setReports((data ?? []) as unknown as ReportRow[]);
+    setLoading(false);
+  }, [reportFilter]);
+
+  const viewDocument = async (req: VerificationRequest) => {
+    const { data, error } = await supabase.storage.from("verification-docs").createSignedUrl(req.document_path, 300);
+    if (error || !data?.signedUrl) {
+      toast.error("Couldn't open document");
+      return;
+    }
+    window.open(data.signedUrl, "_blank", "noopener");
+  };
+
+  const reviewVerification = async (req: VerificationRequest, approve: boolean) => {
+    let note: string | null = null;
+    if (!approve) {
+      note = window.prompt("Reason for rejection (shown to the guide):") ?? null;
+      if (note === null) return; // cancelled
+    }
+    setReviewingId(req.id);
+    const { error } = await supabase.rpc("admin_review_verification", {
+      p_request_id: req.id,
+      p_approve: approve,
+      p_note: note,
+    });
+    if (error) toast.error(error.message || "Failed to review request");
+    else {
+      toast.success(approve ? `${req.guide?.name ?? "Guide"} verified!` : "Request rejected");
+      fetchVerifications();
+    }
+    setReviewingId(null);
+  };
+
+  const updateReportStatus = async (report: ReportRow, status: "reviewed" | "dismissed") => {
+    setActioningReportId(report.id);
+    const { error } = await supabase.from("reports").update({ status }).eq("id", report.id);
+    if (error) toast.error(error.message);
+    else {
+      toast.success(status === "dismissed" ? "Report dismissed" : "Report marked reviewed");
+      fetchReports();
+    }
+    setActioningReportId(null);
+  };
+
+  const archiveListing = async (report: ReportRow) => {
+    if (!report.location) return;
+    if (!window.confirm(`Archive "${report.location.title}"? It will disappear from Explore/Map.`)) return;
+    setActioningReportId(report.id);
+    const { error } = await supabase.from("locations").update({ status: "archived" }).eq("id", report.location.id);
+    if (error) toast.error(error.message);
+    else {
+      await supabase.from("reports").update({ status: "reviewed" }).eq("id", report.id);
+      toast.success("Listing archived");
+      fetchReports();
+    }
+    setActioningReportId(null);
+  };
+
+  const toggleBanGuide = async (report: ReportRow) => {
+    const guide = report.location?.guide;
+    if (!guide) return;
+    const banning = !guide.is_banned;
+    if (banning && !window.confirm(`Ban ${guide.name}? They won't be able to post listings, messages, or bookings.`)) return;
+    setActioningReportId(report.id);
+    const { error } = await supabase.rpc("admin_set_banned", { p_user_id: guide.id, p_banned: banning });
+    if (error) toast.error(error.message);
+    else {
+      toast.success(banning ? `${guide.name} banned` : `${guide.name} unbanned`);
+      fetchReports();
+    }
+    setActioningReportId(null);
+  };
+
   const fetchBookings = useCallback(async () => {
     setLoading(true);
     let query = supabase
@@ -334,11 +512,24 @@ const AdminDashboard = () => {
     if (!user?.is_admin) return;
     if (activeTab === "overview") fetchStats();
     else if (activeTab === "guides") fetchGuides();
+    else if (activeTab === "verifications") fetchVerifications();
+    else if (activeTab === "reports") fetchReports();
     else if (activeTab === "bookings") fetchBookings();
     else if (activeTab === "buddy") fetchBuddyTrips();
     else if (activeTab === "analytics") fetchAnalytics();
+    else if (activeTab === "payouts") fetchPayouts();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, user?.is_admin]);
+
+  useEffect(() => {
+    if (activeTab === "verifications" && user?.is_admin) fetchVerifications();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [verifFilter]);
+
+  useEffect(() => {
+    if (activeTab === "reports" && user?.is_admin) fetchReports();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reportFilter]);
 
   // Re-fetch when guide filter/search changes
   useEffect(() => {
@@ -381,6 +572,8 @@ const AdminDashboard = () => {
   const refresh = () => {
     if (activeTab === "overview") fetchStats();
     else if (activeTab === "guides") fetchGuides();
+    else if (activeTab === "verifications") fetchVerifications();
+    else if (activeTab === "reports") fetchReports();
     else if (activeTab === "bookings") fetchBookings();
     else if (activeTab === "buddy") fetchBuddyTrips();
     else fetchAnalytics();
@@ -397,11 +590,14 @@ const AdminDashboard = () => {
   if (!user?.is_admin) return null;
 
   const TABS: { key: AdminTab; label: string }[] = [
-    { key: "overview",  label: "Overview" },
-    { key: "guides",    label: "Guides" },
-    { key: "bookings",  label: "Bookings" },
-    { key: "buddy",     label: "Buddy Trips" },
-    { key: "analytics", label: "Analytics" },
+    { key: "overview",      label: "Overview" },
+    { key: "guides",        label: "Guides" },
+    { key: "verifications", label: "Verifications" },
+    { key: "reports",       label: "Reports" },
+    { key: "bookings",      label: "Bookings" },
+    { key: "buddy",         label: "Buddy Trips" },
+    { key: "analytics",     label: "Analytics" },
+    { key: "payouts",       label: "Payouts" },
   ];
 
   return (
@@ -640,6 +836,181 @@ const AdminDashboard = () => {
         </div>
       )}
 
+      {/* ── VERIFICATIONS ────────────────────────────────────────────────────── */}
+      {activeTab === "verifications" && (
+        <div className="px-6 space-y-3">
+          <div className="flex gap-2">
+            {(["pending", "all"] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => setVerifFilter(f)}
+                className={`px-4 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                  verifFilter === f ? "gradient-primary text-primary-foreground shadow-glow" : "glass text-muted-foreground"
+                }`}
+              >
+                {f === "pending" ? "Pending" : "All"}
+              </button>
+            ))}
+          </div>
+
+          {loading ? <Spinner /> : verifRequests.length === 0 ? (
+            <p className="text-center py-12 text-muted-foreground text-sm">
+              {verifFilter === "pending" ? "No pending verification requests" : "No verification requests yet"}
+            </p>
+          ) : verifRequests.map((req, i) => (
+            <motion.div
+              key={req.id}
+              initial={{ y: 10, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: i * 0.02 }}
+              className="glass rounded-2xl p-4 shadow-card space-y-3"
+            >
+              <div className="flex items-center gap-3">
+                <MiniAvatar url={req.guide?.profile_photo_url ?? null} name={req.guide?.name ?? ""} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-foreground truncate">{req.guide?.name ?? "Unknown guide"}</p>
+                  <p className="text-xs text-muted-foreground truncate">{req.guide?.email}</p>
+                </div>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium shrink-0 ${
+                  req.status === "pending" ? "bg-amber-500/10 text-amber-600"
+                  : req.status === "approved" ? "bg-green-500/10 text-green-600"
+                  : "bg-red-500/10 text-red-500"
+                }`}>
+                  {req.status}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                <span className="flex items-center gap-1"><FileText size={11} /> {DOC_TYPE_LABELS[req.document_type] ?? req.document_type}</span>
+                <span>{fmtDate(req.created_at)}</span>
+                {req.admin_note && <span className="italic truncate">"{req.admin_note}"</span>}
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => viewDocument(req)}
+                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl glass border border-border text-xs font-semibold text-foreground"
+                >
+                  <FileText size={13} /> View Document
+                </button>
+                {req.status === "pending" && (
+                  <>
+                    <button
+                      onClick={() => reviewVerification(req, true)}
+                      disabled={reviewingId === req.id}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl gradient-primary text-primary-foreground text-xs font-semibold shadow-glow disabled:opacity-50"
+                    >
+                      <CheckCircle size={13} /> Approve
+                    </button>
+                    <button
+                      onClick={() => reviewVerification(req, false)}
+                      disabled={reviewingId === req.id}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-destructive/10 text-destructive text-xs font-semibold disabled:opacity-50"
+                    >
+                      <XCircle size={13} /> Reject
+                    </button>
+                  </>
+                )}
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      )}
+
+      {/* ── REPORTS ──────────────────────────────────────────────────────────── */}
+      {activeTab === "reports" && (
+        <div className="px-6 space-y-3">
+          <div className="flex gap-2">
+            {(["open", "all"] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => setReportFilter(f)}
+                className={`px-4 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                  reportFilter === f ? "gradient-primary text-primary-foreground shadow-glow" : "glass text-muted-foreground"
+                }`}
+              >
+                {f === "open" ? "Open" : "All"}
+              </button>
+            ))}
+          </div>
+
+          {loading ? <Spinner /> : reports.length === 0 ? (
+            <p className="text-center py-12 text-muted-foreground text-sm">
+              {reportFilter === "open" ? "No open reports 🎉" : "No reports yet"}
+            </p>
+          ) : reports.map((report, i) => (
+            <motion.div
+              key={report.id}
+              initial={{ y: 10, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: i * 0.02 }}
+              className="glass rounded-2xl p-4 shadow-card space-y-3"
+            >
+              <div className="flex items-start gap-2">
+                <Flag size={14} className="text-destructive shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-foreground">
+                    {report.location?.title ?? "Deleted listing"}
+                    {report.location?.status === "archived" && (
+                      <span className="ml-2 text-[10px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground font-medium">archived</span>
+                    )}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">"{report.reason}"</p>
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Reported by {report.reporter?.name ?? "Unknown"} • {fmtDate(report.created_at)}
+                    {report.location?.guide && <> • Listing by {report.location.guide.name}{report.location.guide.is_banned && " (banned)"}</>}
+                  </p>
+                </div>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium shrink-0 ${
+                  report.status === "open" ? "bg-amber-500/10 text-amber-600"
+                  : report.status === "reviewed" ? "bg-green-500/10 text-green-600"
+                  : "bg-gray-500/10 text-gray-500"
+                }`}>
+                  {report.status}
+                </span>
+              </div>
+
+              {report.status === "open" && (
+                <div className="flex gap-2 flex-wrap">
+                  {report.location && report.location.status !== "archived" && (
+                    <button
+                      onClick={() => archiveListing(report)}
+                      disabled={actioningReportId === report.id}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-destructive/10 text-destructive text-xs font-semibold disabled:opacity-50"
+                    >
+                      <Archive size={13} /> Archive Listing
+                    </button>
+                  )}
+                  {report.location?.guide && (
+                    <button
+                      onClick={() => toggleBanGuide(report)}
+                      disabled={actioningReportId === report.id}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-destructive/10 text-destructive text-xs font-semibold disabled:opacity-50"
+                    >
+                      <Ban size={13} /> {report.location.guide.is_banned ? "Unban Guide" : "Ban Guide"}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => updateReportStatus(report, "reviewed")}
+                    disabled={actioningReportId === report.id}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl gradient-primary text-primary-foreground text-xs font-semibold shadow-glow disabled:opacity-50"
+                  >
+                    <CheckCircle size={13} /> Mark Reviewed
+                  </button>
+                  <button
+                    onClick={() => updateReportStatus(report, "dismissed")}
+                    disabled={actioningReportId === report.id}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl glass border border-border text-xs font-semibold text-muted-foreground disabled:opacity-50"
+                  >
+                    <XCircle size={13} /> Dismiss
+                  </button>
+                </div>
+              )}
+            </motion.div>
+          ))}
+        </div>
+      )}
+
       {/* ── BOOKINGS ─────────────────────────────────────────────────────────── */}
       {activeTab === "bookings" && (
         <div className="px-6 space-y-3">
@@ -815,6 +1186,46 @@ const AdminDashboard = () => {
                 </ResponsiveContainer>
               </ChartCard>
             </>
+          )}
+        </div>
+      )}
+
+      {/* ── PAYOUTS ─────────────────────────────────────────────────────────── */}
+      {activeTab === "payouts" && (
+        <div className="px-6 space-y-4">
+          <div className="glass rounded-2xl p-4 border border-primary/10">
+            <p className="text-xs text-muted-foreground mb-1">Payouts are manual — transfer to the guide's UPI/bank, then click "Mark Paid" to zero their balance.</p>
+          </div>
+          {payoutsLoading ? (
+            <div className="flex justify-center py-12"><div className="w-7 h-7 border-4 border-primary border-t-transparent rounded-full animate-spin" /></div>
+          ) : payouts.length === 0 ? (
+            <div className="text-center py-16 glass rounded-2xl opacity-60">
+              <IndianRupee size={32} className="mx-auto text-muted-foreground mb-2" />
+              <p className="text-sm font-semibold">No pending payouts</p>
+              <p className="text-xs text-muted-foreground mt-1">All guide balances are settled.</p>
+            </div>
+          ) : (
+            payouts.map((p) => (
+              <div key={p.guide_id} className="glass rounded-2xl p-4 shadow-card flex items-center gap-3 border border-primary/5">
+                <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center shrink-0">
+                  <User size={16} className="text-primary-foreground" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold truncate">{p.guide_name}</p>
+                  <p className="text-[10px] text-muted-foreground">Balance due</p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-base font-bold text-green-500">₹{p.balance.toLocaleString()}</p>
+                  <button
+                    disabled={markingPayout === p.guide_id}
+                    onClick={() => markPaid(p.guide_id, p.balance)}
+                    className="mt-1 px-3 py-1 rounded-lg gradient-primary text-primary-foreground text-[10px] font-bold active:scale-95 transition-transform disabled:opacity-50"
+                  >
+                    {markingPayout === p.guide_id ? "Saving…" : "Mark Paid"}
+                  </button>
+                </div>
+              </div>
+            ))
           )}
         </div>
       )}

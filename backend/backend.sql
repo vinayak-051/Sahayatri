@@ -71,7 +71,9 @@ create table public.bookings (
   date date not null,
   people int default 1,
   amount numeric not null check (amount >= 0),
-  status text default 'pending' check (status in ('pending', 'accepted', 'declined', 'completed', 'cancelled')),
+  status text default 'pending' check (status in ('pending', 'accepted', 'confirmed', 'declined', 'completed', 'cancelled')),
+  final_payment_mode text check (final_payment_mode in ('online', 'cash')),
+  cancellation_fee numeric default 0,
   feedback text default '',
   created_at timestamptz default now()
 );
@@ -174,7 +176,7 @@ create index locations_category_idx on public.locations(category);
 create index locations_status_idx on public.locations(status);
 create index bookings_traveler_id_idx on public.bookings(traveler_id);
 create index bookings_guide_id_idx on public.bookings(guide_id);
-create unique index bookings_guide_date_accepted on public.bookings(guide_id, date) where status = 'accepted';
+create unique index bookings_guide_date_accepted on public.bookings(guide_id, date) where status in ('accepted', 'confirmed');
 create index buddy_requests_trip_id_idx on public.buddy_requests(trip_id);
 create index messages_sender_id_idx on public.messages(sender_id);
 create index messages_receiver_id_idx on public.messages(receiver_id);
@@ -288,6 +290,7 @@ create or replace function public.notify_booking_status_change()
 returns trigger as $$
 declare
   guide_name text;
+  traveler_name text;
 begin
   if new.status = old.status then return new; end if;
   if new.status in ('accepted', 'declined') then
@@ -300,10 +303,22 @@ begin
       coalesce(guide_name, 'Your guide') || (case when new.status = 'accepted' then ' accepted' else ' declined' end) || ' your trip to ' || new.destination,
       jsonb_build_object('booking_id', new.id)
     );
-  elsif new.status = 'cancelled' then
+  elsif new.status = 'confirmed' then
+    select name into traveler_name from public.profiles where id = new.traveler_id;
     insert into public.notifications (user_id, type, title, body, data)
     values (
-      case when auth.uid() = new.traveler_id then new.guide_id else new.traveler_id end,
+      new.guide_id,
+      'booking_advance_paid',
+      'Advance received',
+      coalesce(traveler_name, 'A traveler') || ' paid the 50% advance for the trip to ' || new.destination,
+      jsonb_build_object('booking_id', new.id)
+    );
+  elsif new.status = 'cancelled' then
+    -- cancellations via the payments Edge Function run as service role
+    -- (auth.uid() is null), and those are always traveler-initiated
+    insert into public.notifications (user_id, type, title, body, data)
+    values (
+      case when auth.uid() = new.guide_id then new.traveler_id else new.guide_id end,
       'booking_cancelled',
       'Booking cancelled',
       'The trip to ' || new.destination || ' was cancelled',
@@ -562,12 +577,232 @@ create policy "location_media_owner_update" on storage.objects for update using 
 create policy "location_media_owner_delete" on storage.objects for delete using (bucket_id = 'location-media' and (storage.foldername(name))[1] = auth.uid()::text);
 
 -- =============================================================================
+-- PAYMENTS (see migrations/0018_payments.sql)
+-- 50% advance online via Razorpay, 50% final online or cash to guide.
+-- Cancelling within 5 days of the trip forfeits 10% of the total (platform
+-- revenue). Money writes happen only via Edge Functions (service role).
+-- =============================================================================
+
+-- One row per Razorpay order; amounts in rupees
+create table public.payments (
+  id uuid primary key default gen_random_uuid(),
+  booking_id uuid not null references public.bookings(id) on delete cascade,
+  stage text not null check (stage in ('advance', 'final')),
+  razorpay_order_id text unique not null,
+  razorpay_payment_id text,
+  amount numeric not null check (amount > 0),
+  status text default 'created' check (status in ('created', 'paid', 'refunded')),
+  refund_amount numeric default 0,
+  created_at timestamptz default now()
+);
+create index payments_booking_id_idx on public.payments(booking_id);
+
+-- Append-only ledger of what the platform owes each guide.
+-- positive = credit (earning), negative = debit (commission, payout).
+-- Cancellation fees never hit this table: they are platform revenue.
+create table public.guide_ledger (
+  id uuid primary key default gen_random_uuid(),
+  guide_id uuid not null references public.profiles(id) on delete cascade,
+  booking_id uuid references public.bookings(id) on delete set null,
+  type text not null check (type in ('earning', 'commission', 'payout')),
+  amount numeric not null,
+  created_at timestamptz default now()
+);
+create index guide_ledger_guide_id_idx on public.guide_ledger(guide_id);
+
+alter table public.payments enable row level security;
+alter table public.guide_ledger enable row level security;
+
+create policy "payments_select_participants" on public.payments
+  for select using (
+    exists (
+      select 1 from public.bookings b
+      where b.id = payments.booking_id
+        and (b.traveler_id = auth.uid() or b.guide_id = auth.uid())
+    )
+  );
+-- no insert/update policies on payments or guide_ledger: service role only
+
+create policy "guide_ledger_select_own" on public.guide_ledger
+  for select using (guide_id = auth.uid());
+
+-- Payment state can only move via the Edge Functions (service role); otherwise a
+-- traveler could mark themselves paid or dodge the cancellation fee.
+create or replace function public.guard_booking_payment_fields()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.role() = 'service_role' then
+    return new;
+  end if;
+  if new.status = 'confirmed' and old.status is distinct from 'confirmed' then
+    raise exception 'Bookings are confirmed only after the advance payment succeeds';
+  end if;
+  if new.final_payment_mode is distinct from old.final_payment_mode then
+    raise exception 'final_payment_mode is set by the payment system';
+  end if;
+  if new.cancellation_fee is distinct from old.cancellation_fee then
+    raise exception 'cancellation_fee is set by the payment system';
+  end if;
+  if old.status = 'confirmed' and new.status = 'cancelled' then
+    raise exception 'Paid bookings must be cancelled through the cancellation flow so the refund is issued';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger guard_booking_payment_fields
+  before update on public.bookings
+  for each row execute function public.guard_booking_payment_fields();
+
+-- =============================================================================
 -- REALTIME
 -- =============================================================================
 
 alter publication supabase_realtime add table public.messages;
 alter publication supabase_realtime add table public.bookings;
 alter publication supabase_realtime add table public.notifications;
+
+-- =============================================================================
+-- MIGRATION 0014: NO SELF-BOOKING
+-- =============================================================================
+
+alter table public.bookings
+  add constraint bookings_no_self_booking check (traveler_id <> guide_id);
+
+-- =============================================================================
+-- MIGRATION 0015: GUIDE VERIFICATION
+-- =============================================================================
+
+create table public.verification_requests (
+  id uuid primary key default gen_random_uuid(),
+  guide_id uuid not null references public.profiles(id) on delete cascade,
+  document_type text not null check (document_type in ('aadhaar', 'driving_license', 'passport', 'voter_id', 'other')),
+  document_path text not null,
+  status text not null default 'pending' check (status in ('pending', 'approved', 'rejected')),
+  admin_note text,
+  reviewed_by uuid references public.profiles(id),
+  reviewed_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create index verification_requests_guide_id_idx on public.verification_requests(guide_id);
+create index verification_requests_status_idx on public.verification_requests(status);
+create unique index verification_requests_one_pending on public.verification_requests(guide_id) where status = 'pending';
+
+alter table public.verification_requests enable row level security;
+
+create policy "verification_requests_select_own" on public.verification_requests
+  for select using (guide_id = auth.uid());
+create policy "verification_requests_insert_own" on public.verification_requests
+  for insert with check (
+    guide_id = auth.uid()
+    and exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'guide')
+  );
+create policy "verification_requests_select_admin" on public.verification_requests
+  for select using (public.is_admin());
+
+create or replace function public.admin_review_verification(p_request_id uuid, p_approve boolean, p_note text default null)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_guide_id uuid;
+begin
+  if not public.is_admin() then raise exception 'Unauthorized'; end if;
+  update public.verification_requests
+     set status = case when p_approve then 'approved' else 'rejected' end,
+         admin_note = p_note, reviewed_by = auth.uid(), reviewed_at = now()
+   where id = p_request_id and status = 'pending'
+   returning guide_id into v_guide_id;
+  if v_guide_id is null then raise exception 'Request not found or already reviewed'; end if;
+  if p_approve then update public.profiles set is_verified = true where id = v_guide_id; end if;
+  insert into public.admin_actions(admin_id, action, target_id, details)
+  values (auth.uid(), case when p_approve then 'approve_verification' else 'reject_verification' end,
+    v_guide_id, jsonb_build_object('request_id', p_request_id, 'note', p_note));
+end;
+$$;
+
+grant execute on function public.admin_review_verification(uuid, boolean, text) to authenticated;
+
+insert into storage.buckets (id, name, public) values ('verification-docs', 'verification-docs', false) on conflict (id) do nothing;
+create policy "verification_docs_owner_insert" on storage.objects for insert with check (bucket_id = 'verification-docs' and (storage.foldername(name))[1] = auth.uid()::text);
+create policy "verification_docs_owner_read" on storage.objects for select using (bucket_id = 'verification-docs' and (storage.foldername(name))[1] = auth.uid()::text);
+create policy "verification_docs_admin_read" on storage.objects for select using (bucket_id = 'verification-docs' and public.is_admin());
+
+-- =============================================================================
+-- MIGRATION 0016: MODERATION
+-- =============================================================================
+
+create policy "reports_select_admin" on public.reports for select using (public.is_admin());
+create policy "reports_update_admin" on public.reports for update using (public.is_admin());
+create policy "locations_select_admin" on public.locations for select using (public.is_admin());
+create policy "locations_update_admin" on public.locations for update using (public.is_admin());
+create policy "location_reviews_delete_admin" on public.location_reviews for delete using (public.is_admin());
+
+alter table public.profiles add column is_banned boolean not null default false;
+
+create or replace function public.is_banned()
+returns boolean language sql stable security definer set search_path = public as $$
+  select coalesce((select is_banned from public.profiles where id = auth.uid()), false);
+$$;
+grant execute on function public.is_banned() to authenticated;
+
+create policy "messages_deny_banned" on public.messages as restrictive for insert with check (not public.is_banned());
+create policy "bookings_deny_banned" on public.bookings as restrictive for insert with check (not public.is_banned());
+create policy "locations_deny_banned" on public.locations as restrictive for insert with check (not public.is_banned());
+create policy "location_reviews_deny_banned" on public.location_reviews as restrictive for insert with check (not public.is_banned());
+create policy "buddy_trips_deny_banned" on public.buddy_trips as restrictive for insert with check (not public.is_banned());
+create policy "reports_deny_banned" on public.reports as restrictive for insert with check (not public.is_banned());
+
+create or replace function public.admin_set_banned(p_user_id uuid, p_banned boolean)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_admin() then raise exception 'Unauthorized'; end if;
+  if exists (select 1 from public.admin_lookup where user_id = p_user_id) then raise exception 'Cannot ban an admin'; end if;
+  update public.profiles set is_banned = p_banned where id = p_user_id;
+  insert into public.admin_actions(admin_id, action, target_id, details)
+  values (auth.uid(), case when p_banned then 'ban_user' else 'unban_user' end, p_user_id, '{}'::jsonb);
+end;
+$$;
+grant execute on function public.admin_set_banned(uuid, boolean) to authenticated;
+
+-- =============================================================================
+-- MIGRATION 0017: RATE LIMITS
+-- =============================================================================
+
+create or replace function public.rate_limit_messages()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if (select count(*) from public.messages where sender_id = new.sender_id and created_at > now() - interval '1 minute') >= 30 then
+    raise exception 'Rate limit exceeded: too many messages, slow down.';
+  end if;
+  return new;
+end;
+$$;
+create trigger messages_rate_limit before insert on public.messages for each row execute function public.rate_limit_messages();
+
+create or replace function public.rate_limit_bookings()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if (select count(*) from public.bookings where traveler_id = new.traveler_id and created_at > now() - interval '1 day') >= 10 then
+    raise exception 'Rate limit exceeded: too many booking requests today.';
+  end if;
+  return new;
+end;
+$$;
+create trigger bookings_rate_limit before insert on public.bookings for each row execute function public.rate_limit_bookings();
+
+create or replace function public.rate_limit_reports()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if (select count(*) from public.reports where reported_by = new.reported_by and created_at > now() - interval '1 day') >= 10 then
+    raise exception 'Rate limit exceeded: too many reports today.';
+  end if;
+  return new;
+end;
+$$;
+create trigger reports_rate_limit before insert on public.reports for each row execute function public.rate_limit_reports();
 
 -- =============================================================================
 -- AFTER RUNNING:

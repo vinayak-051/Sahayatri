@@ -8,11 +8,12 @@ import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/context/AuthContext";
 import type { Booking } from "@/types/database";
 
-const tabs = ["All", "Pending", "Accepted", "Completed", "Declined", "Cancelled"];
+const tabs = ["All", "Pending", "Accepted", "Confirmed", "Completed", "Declined", "Cancelled"];
 
 const statusConfig: Record<string, { label: string; color: string; bg: string; icon: React.ElementType }> = {
   pending: { label: "Pending", color: "text-amber-600", bg: "bg-amber-50", icon: Clock },
   accepted: { label: "Accepted", color: "text-green-600", bg: "bg-green-50", icon: Check },
+  confirmed: { label: "Advance Paid", color: "text-primary", bg: "bg-blue-50", icon: Check },
   completed: { label: "Completed", color: "text-muted-foreground", bg: "bg-muted", icon: Check },
   declined: { label: "Declined", color: "text-red-500", bg: "bg-red-50", icon: X },
   cancelled: { label: "Cancelled", color: "text-red-500", bg: "bg-red-50", icon: X },
@@ -45,7 +46,7 @@ const GuideBookings = () => {
   const updateBookingStatus = async (bookingId: string, action: "accept" | "decline") => {
     if (action === "accept") {
       const target = bookings.find((b) => b.id === bookingId);
-      const conflict = bookings.find((b) => b.id !== bookingId && b.status === "accepted" && b.date === target?.date);
+      const conflict = bookings.find((b) => b.id !== bookingId && (b.status === "accepted" || b.status === "confirmed") && b.date === target?.date);
       if (conflict) {
         toast.error(`You already have an accepted trip on ${new Date(target!.date).toLocaleDateString()}.`);
         return;
@@ -113,7 +114,7 @@ const GuideBookings = () => {
           </div>
           <div className="w-px h-7 bg-border" />
           <div className="text-center">
-            <p className="text-base font-bold text-green-600">{bookings.filter((b) => b.status === "accepted").length}</p>
+            <p className="text-base font-bold text-green-600">{bookings.filter((b) => b.status === "accepted" || b.status === "confirmed").length}</p>
             <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Accepted</p>
           </div>
         </div>
