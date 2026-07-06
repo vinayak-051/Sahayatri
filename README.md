@@ -22,18 +22,16 @@ backend/    SQL migrations + a Node seed script (uses the Supabase service-role 
 
 1. Go to [supabase.com](https://supabase.com) → New Project. Pick any region/password.
 2. Open **SQL Editor** in the project dashboard, paste the contents of
-   [`backend/migrations/0001_init.sql`](backend/migrations/0001_init.sql), and run it.
+   [`backend/backend.sql`](backend/backend.sql) (the consolidated schema), and run it.
    This creates every table, Row Level Security policy, the `profiles` auto-creation
-   trigger, the two Storage buckets (`avatars`, `location-media`), and enables Realtime
-   on the `messages` table. Then run `0002_sync_guide_rating.sql`, `0003_guide_rate.sql`,
-   `0004_unique_email.sql`, and `0005_real_time_fixes.sql` in that order (each is a small,
-   focused follow-up — see the comment at the top of each file for what it does and any
-   manual steps required before running it, e.g. `0004` needs existing duplicate emails
-   resolved first).
-3. New guides start with `is_verified = false` and show no "Verified" badge anywhere in
-   the app. There's no admin UI for this yet — once you've actually verified a guide's
-   identity, flip their row's `is_verified` to `true` directly in **Table Editor →
-   profiles**.
+   trigger, the Storage buckets, and enables Realtime. Then run the follow-up
+   migrations in [`backend/migrations/`](backend/migrations) **in numeric order**
+   (`0014` blocks self-bookings, `0015` adds guide ID verification, `0016` adds
+   moderation/bans, `0017` adds anti-spam rate limits). Each file's header comment
+   says what it does and any manual step required first.
+3. New guides start with `is_verified = false` and show no "Verified" badge. Guides
+   upload a government ID from their Profile page; admins review and approve/reject
+   it in **Admin Dashboard → Verifications** (requires migration `0015`).
 4. (Optional, for "Continue with Google") In **Authentication → Providers**, enable
    Google and paste your own OAuth client ID/secret from
    [Google Cloud Console](https://console.cloud.google.com/apis/credentials). Add
@@ -99,7 +97,8 @@ guide) and the password above.
 
 There is currently only **one** Supabase project, used for both local development and
 whatever you consider "production." Before any real users sign up, create a **second
-Supabase project** for production and re-run the migrations there (`0001`–`0005`) —
+Supabase project** for production and re-run the migrations there (`backend.sql` +
+`backend/migrations/` in order) —
 keep development/demo data in the original project entirely separate from real user
 data. Point `frontend/.env.local` (or your deploy host's env vars) and `backend/.env` at
 whichever project you mean to target; the two projects don't need to share anything.
@@ -128,18 +127,17 @@ running e2e specs.
   the seed script against this project yet.
 - **403 / "row-level security policy" errors** — you're likely using the anon key
   where a service-role key is expected (or vice versa), or a policy in
-  `0001_init.sql` wasn't applied. Re-run the migration SQL in the Supabase SQL editor;
+  `backend.sql` wasn't applied. Re-run the migration SQL in the Supabase SQL editor;
   it's safe to re-run `create policy` statements only if the table was freshly created,
   so on a non-fresh project drop conflicting policies first.
 - **Migration only partially applied / "table not found in schema cache" / seed script
   fails on a table that should exist** — the SQL editor run stopped partway through (or
-  you're re-running it on a project that already has some of these objects). Paste
-  [`backend/migrations/reset_and_reapply.sql`](backend/migrations/reset_and_reapply.sql)
-  instead — it drops anything that might already exist before recreating everything, so
-  it's always safe to run from scratch. If the seed script then fails with "a user with
-  this email address has already been registered", that's expected after a reset — the
-  seed script handles it automatically (it backfills the profile row for the
-  already-existing auth user) and you can just re-run `npm run seed`.
+  you're re-running it on a project that already has some of these objects). On a
+  non-fresh project, drop the conflicting tables/policies first (or start from a fresh
+  Supabase project) and re-run `backend.sql` from the top. If the seed script then
+  fails with "a user with this email address has already been registered", that's
+  expected — the seed script handles it automatically (it backfills the profile row
+  for the already-existing auth user) and you can just re-run `npm run seed`.
 - **Google sign-in redirects to an error page** — the Google provider isn't enabled in
   Supabase Authentication → Providers, or the redirect URL isn't allow-listed there.
 - **Realtime messages don't appear live** — confirm `alter publication supabase_realtime

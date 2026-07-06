@@ -8,7 +8,15 @@ import GuideBottomNav from "@/components/GuideBottomNav";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/context/AuthContext";
 import { validateImageFile } from "@/lib/validateImage";
-import type { Location } from "@/types/database";
+import type { Location, VerificationRequest, VerificationDocumentType } from "@/types/database";
+
+const DOC_TYPES: { value: VerificationDocumentType; label: string }[] = [
+  { value: "aadhaar", label: "Aadhaar Card" },
+  { value: "driving_license", label: "Driving License" },
+  { value: "passport", label: "Passport" },
+  { value: "voter_id", label: "Voter ID" },
+  { value: "other", label: "Other Govt. ID" },
+];
 
 const GuideProfile = () => {
   const navigate = useNavigate();
@@ -23,6 +31,58 @@ const GuideProfile = () => {
   const [togglingAvailability, setTogglingAvailability] = useState(false);
 
   const [formData, setFormData] = useState({ name: "", bio: "", city: "", languages: "", specialization: "", ratePerDay: "" });
+
+  const docInputRef = useRef<HTMLInputElement>(null);
+  const [verifRequest, setVerifRequest] = useState<VerificationRequest | null>(null);
+  const [docType, setDocType] = useState<VerificationDocumentType>("aadhaar");
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+
+  const fetchVerification = useCallback(async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from("verification_requests")
+      .select("*")
+      .eq("guide_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    setVerifRequest((data as VerificationRequest) ?? null);
+  }, [user]);
+
+  const handleDocUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    if (!["image/jpeg", "image/png", "image/webp", "application/pdf"].includes(file.type)) {
+      toast.error("Upload a JPG, PNG, WebP, or PDF file.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("File must be under 5 MB.");
+      return;
+    }
+    setUploadingDoc(true);
+    try {
+      const ext = file.name.split(".").pop();
+      const path = `${user.id}/${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage.from("verification-docs").upload(path, file);
+      if (uploadError) {
+        toast.error(uploadError.message);
+        return;
+      }
+      const { error } = await supabase
+        .from("verification_requests")
+        .insert({ guide_id: user.id, document_type: docType, document_path: path });
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+      toast.success("Document submitted! We'll review it shortly.");
+      fetchVerification();
+    } finally {
+      setUploadingDoc(false);
+      if (docInputRef.current) docInputRef.current.value = "";
+    }
+  };
 
   const fetchStats = useCallback(async () => {
     if (!user) return;
@@ -70,7 +130,8 @@ const GuideProfile = () => {
     }
     fetchStats();
     fetchMyLocations();
-  }, [user, fetchStats, fetchMyLocations]);
+    fetchVerification();
+  }, [user, fetchStats, fetchMyLocations, fetchVerification]);
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -171,10 +232,46 @@ const GuideProfile = () => {
       <div className="px-6 pt-8">
         {!user.is_verified && (
           <div className="glass rounded-2xl p-4 mb-4 border border-amber-500/40 bg-amber-500/5">
-            <p className="text-sm font-semibold text-amber-600">⏳ Pending Verification</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Your account is awaiting admin verification. You cannot accept bookings until verified.
-            </p>
+            {verifRequest?.status === "pending" ? (
+              <>
+                <p className="text-sm font-semibold text-amber-600">⏳ Verification Under Review</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Your ID document was submitted on {new Date(verifRequest.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })} and is being reviewed. You cannot accept bookings until verified.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-semibold text-amber-600">
+                  {verifRequest?.status === "rejected" ? "❌ Verification Rejected" : "⏳ Verification Required"}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {verifRequest?.status === "rejected"
+                    ? verifRequest.admin_note
+                      ? `Reason: ${verifRequest.admin_note}. Please upload a valid document to try again.`
+                      : "Your document was rejected. Please upload a valid government ID to try again."
+                    : "Upload a government ID (Aadhaar, DL, passport) to get verified. Your document is stored privately and only visible to Sahayatri admins."}
+                </p>
+                <div className="flex gap-2 mt-3">
+                  <select
+                    value={docType}
+                    onChange={(e) => setDocType(e.target.value as VerificationDocumentType)}
+                    className="flex-1 bg-background/60 border border-border rounded-xl px-3 py-2 text-xs text-foreground outline-none"
+                  >
+                    {DOC_TYPES.map((d) => (
+                      <option key={d.value} value={d.value}>{d.label}</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={() => docInputRef.current?.click()}
+                    disabled={uploadingDoc}
+                    className="px-4 py-2 rounded-xl gradient-primary text-white text-xs font-bold active:scale-95 transition-transform disabled:opacity-50"
+                  >
+                    {uploadingDoc ? "Uploading..." : "Upload ID"}
+                  </button>
+                  <input type="file" hidden ref={docInputRef} onChange={handleDocUpload} accept="image/jpeg,image/png,image/webp,application/pdf" />
+                </div>
+              </>
+            )}
           </div>
         )}
         <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="glass rounded-3xl p-6 shadow-elevated text-center mb-6">

@@ -58,7 +58,7 @@ const LocationDetail = () => {
     setLoading(true);
     const { data, error } = await supabase
       .from("locations")
-      .select("*, guide:profiles!locations_guide_id_fkey(id, name, profile_photo_url, city, rating, bio, languages, is_available)")
+      .select("*, guide:profiles!locations_guide_id_fkey(id, name, profile_photo_url, city, rating, bio, languages, is_available, is_verified)")
       .eq("id", id)
       .single();
 
@@ -75,10 +75,11 @@ const LocationDetail = () => {
     const [{ data: otherLocs }, { data: buddyTrips }] = await Promise.all([
       supabase
         .from("locations")
-        .select("*, guide:profiles!locations_guide_id_fkey(id, name, profile_photo_url, city, rating)")
+        .select("*, guide:profiles!locations_guide_id_fkey!inner(id, name, profile_photo_url, city, rating)")
         .ilike("title", `%${title}%`)
         .neq("id", id)
-        .eq("status", "active"),
+        .eq("status", "active")
+        .eq("profiles.is_verified", true),
       supabase
         .from("buddy_trips")
         .select("*, user:profiles!buddy_trips_user_id_fkey(id, name, profile_photo_url)")
@@ -116,6 +117,17 @@ const LocationDetail = () => {
   useEffect(() => {
     fetchReviews();
   }, [fetchReviews]);
+
+  const deleteReview = async (reviewId: string) => {
+    if (!window.confirm("Delete this review? This cannot be undone.")) return;
+    const { error } = await supabase.from("location_reviews").delete().eq("id", reviewId);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Review removed");
+    fetchReviews();
+  };
 
   const submitReview = async () => {
     if (!myRating || !myComment.trim() || !id || !user) return;
@@ -196,6 +208,14 @@ const LocationDetail = () => {
       navigate("/auth");
       return;
     }
+    if (location?.guide_id === user.id) {
+      toast.error("You can't book your own spot.");
+      return;
+    }
+    if (location?.guide && !location.guide.is_verified) {
+      toast.error("This guide isn't verified yet. Booking is disabled.");
+      return;
+    }
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     setRequestDate(tomorrow.toISOString().slice(0, 10));
@@ -205,6 +225,10 @@ const LocationDetail = () => {
 
   const handleRequestTrip = async () => {
     if (!user || !location || !requestDate) return;
+    if (location.guide_id === user.id) {
+      toast.error("You can't book your own spot.");
+      return;
+    }
     if (location.price_per_person != null && location.price_per_person <= 0) {
       toast.error("This location has an invalid price. Contact the guide directly.");
       return;
@@ -272,6 +296,8 @@ const LocationDetail = () => {
   }
 
   const city = location.guide?.city || "India";
+  const isOwnSpot = user?.id === location.guide_id;
+  const isUnverifiedGuide = !location.guide || location.guide.is_verified === false;
 
   return (
     <div className="min-h-screen gradient-sky pb-28 text-foreground">
@@ -323,6 +349,12 @@ const LocationDetail = () => {
       )}
 
       <div className="px-6 -mt-6">
+        {isUnverifiedGuide && !isOwnSpot && (
+          <div className="rounded-2xl px-4 py-3 mb-4 bg-destructive/10 border border-destructive/20 flex items-center gap-2">
+            <ShieldCheck size={14} className="text-destructive shrink-0" />
+            <p className="text-[11px] text-destructive font-medium">This guide hasn't been verified by Sahayatri yet. Booking is disabled until verification.</p>
+          </div>
+        )}
         <div className="glass rounded-2xl p-5 shadow-card mb-6">
           <h2 className="text-sm font-bold text-foreground mb-2">About this spot</h2>
           <p className="text-xs text-muted-foreground leading-relaxed mb-4">{location.detailed_content}</p>
@@ -482,9 +514,16 @@ const LocationDetail = () => {
                         </div>
                       </div>
                     </div>
-                    <span className="text-[8px] text-muted-foreground whitespace-nowrap">
-                      {new Date(r.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
-                    </span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[8px] text-muted-foreground whitespace-nowrap">
+                        {new Date(r.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                      </span>
+                      {user?.is_admin && (
+                        <button onClick={() => deleteReview(r.id)} className="text-[9px] font-bold text-destructive">
+                          Delete
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <p className="text-xs text-muted-foreground leading-relaxed pl-10">{r.comment}</p>
                 </div>
@@ -516,14 +555,18 @@ const LocationDetail = () => {
         <div className="flex gap-3 max-w-sm mx-auto">
           <button
             onClick={openRequestForm}
-            disabled={requesting || myRequestStatus === "pending" || myRequestStatus === "accepted" || location.guide?.is_available === false}
+            disabled={requesting || myRequestStatus === "pending" || myRequestStatus === "accepted" || location.guide?.is_available === false || isOwnSpot || isUnverifiedGuide}
             className={`flex-1 py-3.5 rounded-2xl font-semibold text-sm active:scale-95 transition-transform disabled:opacity-60 ${
-              myRequestStatus === "pending" || myRequestStatus === "accepted" || location.guide?.is_available === false
+              myRequestStatus === "pending" || myRequestStatus === "accepted" || location.guide?.is_available === false || isOwnSpot || isUnverifiedGuide
                 ? "bg-secondary text-muted-foreground"
                 : "gradient-primary text-primary-foreground shadow-glow"
             }`}
           >
-            {location.guide?.is_available === false
+            {isOwnSpot
+              ? "This is Your Spot"
+              : isUnverifiedGuide
+              ? "Guide Not Verified"
+              : location.guide?.is_available === false
               ? "Guide Not Available"
               : myRequestStatus === "pending"
               ? "Requested"

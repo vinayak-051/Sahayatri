@@ -55,10 +55,10 @@ const MapView = () => {
   useEffect(() => {
     const load = async () => {
       const [{ data: locs }, { data: gds }] = await Promise.all([
-        supabase.from("locations").select("id, title, lat, lng, rating").eq("status", "active"),
-        supabase.from("profiles").select("id, name, city, rating").eq("role", "guide"),
+        supabase.from("locations").select("id, title, lat, lng, rating, guide:profiles!locations_guide_id_fkey!inner(is_verified)").eq("status", "active").eq("profiles.is_verified", true),
+        supabase.from("profiles").select("id, name, city, rating").eq("role", "guide").eq("is_verified", true),
       ]);
-      setLocations((locs ?? []) as Location[]);
+      setLocations((locs ?? []) as unknown as Location[]);
       setGuides((gds ?? []) as Profile[]);
     };
     load();
