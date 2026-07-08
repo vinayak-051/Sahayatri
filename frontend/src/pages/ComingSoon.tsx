@@ -27,7 +27,7 @@ const ComingSoon = () => {
   return (
     <div className="min-h-screen gradient-sky flex flex-col">
       <div className="px-6 pt-6 pb-4 flex items-center gap-3">
-        <button onClick={() => navigate(-1)} className="p-1">
+        <button aria-label="Go back" onClick={() => navigate(-1)} className="p-1">
           <ArrowLeft size={22} className="text-foreground" />
         </button>
         <h1 className="text-lg font-bold text-foreground">{feature.name}</h1>

@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { toast } from "sonner";
 import BottomNav from "@/components/BottomNav";
 import { supabase } from "@/lib/supabaseClient";
 import type { Location, Profile } from "@/types/database";
@@ -51,15 +52,22 @@ const MapView = () => {
   const [filter, setFilter] = useState<"all" | "destinations" | "guides">("all");
   const [locations, setLocations] = useState<Location[]>([]);
   const [guides, setGuides] = useState<Profile[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const load = async () => {
-      const [{ data: locs }, { data: gds }] = await Promise.all([
+      setLoading(true);
+      const [{ data: locs, error: locsError }, { data: gds, error: gdsError }] = await Promise.all([
         supabase.from("locations").select("id, title, lat, lng, rating, guide:profiles!locations_guide_id_fkey!inner(is_verified)").eq("status", "active").eq("profiles.is_verified", true),
         supabase.from("profiles").select("id, name, city, rating").eq("role", "guide").eq("is_verified", true),
       ]);
+      if (locsError || gdsError) {
+        console.error("Failed to load map data:", locsError?.message || gdsError?.message);
+        toast.error("Couldn't load the map right now.");
+      }
       setLocations((locs ?? []) as unknown as Location[]);
       setGuides((gds ?? []) as Profile[]);
+      setLoading(false);
     };
     load();
   }, []);
@@ -89,7 +97,7 @@ const MapView = () => {
   return (
     <div className="h-screen flex flex-col">
       <div className="glass px-4 py-3 flex items-center gap-3 border-b border-border z-[1000] relative">
-        <button onClick={() => navigate("/home")} className="p-1">
+        <button aria-label="Go back" onClick={() => navigate(-1)} className="p-1">
           <ArrowLeft size={22} className="text-foreground" />
         </button>
         <h1 className="text-sm font-semibold text-foreground flex-1">Map View</h1>
@@ -109,6 +117,11 @@ const MapView = () => {
       </div>
 
       <div className="flex-1 relative">
+        {loading && (
+          <div className="absolute inset-0 z-[1000] flex items-center justify-center bg-background/60">
+            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          </div>
+        )}
         <MapContainer center={INDIA_CENTER} zoom={5} style={{ height: "100%", width: "100%" }} zoomControl={false}>
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'

@@ -33,7 +33,7 @@ const CompleteProfile = () => {
   const [role, setRole] = useState<Role>(presetRole ?? "traveler");
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
-  const { user, refreshProfile } = useAuth();
+  const { user, refreshProfile, logout } = useAuth();
 
   const {
     register,
@@ -84,6 +84,14 @@ const CompleteProfile = () => {
     <div className="relative min-h-screen overflow-hidden">
       <img src={heroImg} alt="" className="absolute inset-0 w-full h-full object-cover blur-sm scale-105" />
       <div className="absolute inset-0 bg-black/50" />
+
+      <button
+        aria-label="Sign out"
+        onClick={async () => { await logout(); navigate("/auth"); }}
+        className="absolute top-6 right-6 z-20 text-xs font-semibold text-primary-foreground/70 underline"
+      >
+        Sign out
+      </button>
 
       <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-6">
         <motion.div
@@ -165,6 +173,7 @@ const CompleteProfile = () => {
                 />
                 <button
                   type="button"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground"
                 >

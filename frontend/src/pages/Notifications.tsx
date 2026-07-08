@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { ArrowLeft, Bell, Calendar, Check, X, MessageCircle } from "lucide-react";
+import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/context/AuthContext";
@@ -43,11 +44,15 @@ const Notifications = () => {
   const fetchNotifications = useCallback(async () => {
     if (!user) return;
     setLoading(true);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("notifications")
       .select("*")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false });
+    if (error) {
+      console.error("Failed to fetch notifications:", error.message);
+      toast.error("Couldn't load notifications right now.");
+    }
     setNotifications((data ?? []) as AppNotification[]);
     setLoading(false);
 
@@ -84,7 +89,7 @@ const Notifications = () => {
   return (
     <div className="min-h-screen gradient-sky pb-20">
       <div className="px-6 pt-6 pb-4 flex items-center gap-3">
-        <button onClick={() => navigate(isGuide ? "/guide-dashboard" : "/home")} className="p-1"><ArrowLeft size={22} className="text-foreground" /></button>
+        <button aria-label="Go back" onClick={() => navigate(isGuide ? "/guide-dashboard" : "/home")} className="p-1"><ArrowLeft size={22} className="text-foreground" /></button>
         <h1 className="text-lg font-bold text-foreground flex-1">Notifications</h1>
       </div>
 
@@ -122,7 +127,7 @@ const Notifications = () => {
         ) : (
           <div className="text-center py-20 opacity-50">
             <Bell size={40} className="mx-auto mb-4 text-muted-foreground" />
-            <p className="text-sm">No notifications yet from Sahayatri members.</p>
+            <p className="text-sm">No notifications yet.</p>
           </div>
         )}
       </div>

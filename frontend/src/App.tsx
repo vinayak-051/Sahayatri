@@ -30,6 +30,7 @@ const Messages = lazy(() => import("./pages/Messages"));
 const Notifications = lazy(() => import("./pages/Notifications"));
 const MapView = lazy(() => import("./pages/MapView"));
 const LocationDetail = lazy(() => import("./pages/LocationDetail"));
+const SavedPlaces = lazy(() => import("./pages/SavedPlaces"));
 const GuideDashboard = lazy(() => import("./pages/GuideDashboard"));
 const GuideBookings = lazy(() => import("./pages/GuideBookings"));
 const GuideProfile = lazy(() => import("./pages/GuideProfile"));
@@ -81,6 +82,7 @@ const App = () => (
               <Route path="/notifications" element={<ProtectedRoute role="any"><Notifications /></ProtectedRoute>} />
               <Route path="/map" element={<ProtectedRoute role="traveler"><MapView /></ProtectedRoute>} />
               <Route path="/location/:id" element={<ProtectedRoute role="traveler"><ErrorBoundary><LocationDetail /></ErrorBoundary></ProtectedRoute>} />
+              <Route path="/saved" element={<ProtectedRoute role="traveler"><SavedPlaces /></ProtectedRoute>} />
 
               {/* Guide */}
               <Route path="/guide-dashboard" element={<ProtectedRoute role="guide"><GuideDashboard /></ProtectedRoute>} />

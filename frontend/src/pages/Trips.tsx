@@ -28,6 +28,7 @@ const Trips = () => {
       .order("date", { ascending: false });
     if (error) {
       console.error("Failed to fetch trips:", error.message);
+      toast.error("Couldn't load your trips right now.");
     } else {
       setBookings((data ?? []) as Booking[]);
     }
@@ -356,7 +357,7 @@ const Trips = () => {
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-primary/10 rounded-2xl flex items-center justify-center text-xl">⏳</div>
                     <div>
-                      <h3 className="text-xs font-bold text-foreground">{t.destination} Spot</h3>
+                      <h3 className="text-xs font-bold text-foreground">{t.destination}</h3>
                       <p className="text-[10px] text-muted-foreground mt-0.5">Booking with {t.guide?.name}</p>
                     </div>
                   </div>
@@ -380,7 +381,7 @@ const Trips = () => {
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-destructive/10 rounded-2xl flex items-center justify-center text-xl">✕</div>
                     <div>
-                      <h3 className="text-xs font-bold text-foreground">{t.destination} Spot</h3>
+                      <h3 className="text-xs font-bold text-foreground">{t.destination}</h3>
                       <p className="text-[10px] text-muted-foreground mt-0.5">Declined by {t.guide?.name}</p>
                     </div>
                   </div>
@@ -400,7 +401,7 @@ const Trips = () => {
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-secondary rounded-2xl flex items-center justify-center text-xl">🚫</div>
                     <div>
-                      <h3 className="text-xs font-bold text-foreground">{t.destination} Spot</h3>
+                      <h3 className="text-xs font-bold text-foreground">{t.destination}</h3>
                       <p className="text-[10px] text-muted-foreground mt-0.5">Cancelled • was with {t.guide?.name}</p>
                     </div>
                   </div>

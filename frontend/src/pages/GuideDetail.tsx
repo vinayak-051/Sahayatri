@@ -234,6 +234,24 @@ const GuideDetail = () => {
             )}
           </div>
 
+          {reviews.length > 0 && (
+            <div className="space-y-1 mb-4">
+              {[5, 4, 3, 2, 1].map((star) => {
+                const count = reviews.filter((r) => r.rating === star).length;
+                const pct = (count / reviews.length) * 100;
+                return (
+                  <div key={star} className="flex items-center gap-2">
+                    <span className="text-[10px] text-muted-foreground w-6 shrink-0">{star}★</span>
+                    <div className="flex-1 h-1.5 rounded-full bg-secondary overflow-hidden">
+                      <div className="h-full bg-accent rounded-full" style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="text-[10px] text-muted-foreground w-4 text-right shrink-0">{count}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           <AnimatePresence>
             {showReviewForm && (
               <motion.div
@@ -379,11 +397,19 @@ const GuideDetail = () => {
                   />
                 </div>
 
-                <div className="flex items-center justify-between bg-white/5 rounded-xl px-4 py-3">
-                  <span className="text-xs text-white/60">Total ({bookingPeople} {bookingPeople === 1 ? "person" : "people"})</span>
-                  <span className="text-sm font-bold text-white">
-                    {guide.rate_per_day != null ? `₹${(guide.rate_per_day * bookingPeople).toLocaleString()}` : "To be discussed with guide"}
-                  </span>
+                <div className="bg-white/5 rounded-xl px-4 py-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-white/60">Guide Fee ({bookingPeople} {bookingPeople === 1 ? "person" : "people"})</span>
+                    <span className="text-xs font-medium text-white/80">
+                      {guide.rate_per_day != null ? `₹${(guide.rate_per_day * bookingPeople).toLocaleString()}` : "To be discussed with guide"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between pt-2 border-t border-white/10">
+                    <span className="text-xs font-semibold text-white">Total</span>
+                    <span className="text-sm font-bold text-white">
+                      {guide.rate_per_day != null ? `₹${(guide.rate_per_day * bookingPeople).toLocaleString()}` : "To be discussed with guide"}
+                    </span>
+                  </div>
                 </div>
 
                 <button

@@ -805,6 +805,54 @@ $$;
 create trigger reports_rate_limit before insert on public.reports for each row execute function public.rate_limit_reports();
 
 -- =============================================================================
+-- MIGRATION 0019: SAVED LOCATIONS / WISHLIST
+-- =============================================================================
+-- Real per-user saved/wishlist tracking for locations. Replaces the
+-- write-only locations.saves_count increment (which never recorded *who*
+-- saved *what*, so it couldn't be un-saved or listed back to the user)
+-- with a proper join table. saves_count is kept in sync via trigger so
+-- existing UI reading it keeps working unchanged.
+
+create table public.saved_locations (
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  location_id uuid not null references public.locations(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (user_id, location_id)
+);
+
+create index saved_locations_location_id_idx on public.saved_locations(location_id);
+
+alter table public.saved_locations enable row level security;
+
+create policy "saved_locations_select_own" on public.saved_locations
+  for select using (user_id = auth.uid());
+create policy "saved_locations_insert_own" on public.saved_locations
+  for insert with check (user_id = auth.uid());
+create policy "saved_locations_delete_own" on public.saved_locations
+  for delete using (user_id = auth.uid());
+
+create or replace function public.sync_location_saves_count()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'INSERT' then
+    update public.locations set saves_count = saves_count + 1 where id = new.location_id;
+    return new;
+  elsif tg_op = 'DELETE' then
+    update public.locations set saves_count = greatest(saves_count - 1, 0) where id = old.location_id;
+    return old;
+  end if;
+  return null;
+end;
+$$;
+
+create trigger on_saved_location_insert
+  after insert on public.saved_locations
+  for each row execute procedure public.sync_location_saves_count();
+create trigger on_saved_location_delete
+  after delete on public.saved_locations
+  for each row execute procedure public.sync_location_saves_count();
+
+-- =============================================================================
 -- AFTER RUNNING:
 -- Add yourself as admin:
 --   INSERT INTO public.admin_lookup (user_id)

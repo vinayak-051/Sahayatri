@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Mail, Lock, Eye, EyeOff, Briefcase } from "lucide-react";
 import heroImg from "@/assets/hero-travel.jpg";
 import { useAuth } from "@/context/AuthContext";
+import { friendlyAuthError } from "@/lib/authErrors";
 
 const loginSchema = z.object({
   name: z.string().optional(),
@@ -55,7 +56,7 @@ const GuideAuth = () => {
       if (isLogin) {
         const { error } = await login(values.email, values.password, "guide");
         if (error) {
-          toast.error(error);
+          toast.error(friendlyAuthError(error));
           return;
         }
         navigate("/guide-dashboard");
@@ -67,7 +68,7 @@ const GuideAuth = () => {
           role: "guide",
         });
         if (error) {
-          toast.error(error);
+          toast.error(friendlyAuthError(error));
           return;
         }
         if (needsEmailConfirmation) {
@@ -89,7 +90,7 @@ const GuideAuth = () => {
 
   const handleGoogle = async () => {
     const { error } = await loginWithGoogle("/complete-profile?role=guide");
-    if (error) toast.error(error);
+    if (error) toast.error(friendlyAuthError(error));
   };
 
   return (
@@ -144,7 +145,7 @@ const GuideAuth = () => {
                 <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <input type={showPassword ? "text" : "password"} placeholder="Password" {...register("password")}
                   className="w-full pl-11 pr-11 py-3 rounded-xl bg-secondary/50 border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent/50" />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground">
+                <button type="button" aria-label={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground">
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronRight, Map, Shield, LogOut, Compass, User, Camera, X, Check, Lock, MapPin, Globe, Briefcase, FileText, Lightbulb, ShieldCheck } from "lucide-react";
+import { ChevronRight, Map, Shield, LogOut, Compass, User, Camera, X, Check, Lock, MapPin, Globe, Briefcase, FileText, Lightbulb, ShieldCheck, Bookmark } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import BottomNav from "@/components/BottomNav";
@@ -12,6 +12,7 @@ import { validateImageFile } from "@/lib/validateImage";
 const baseMenuItems = [
   { icon: Compass, label: "Become a Guide", path: "/role-select" },
   { icon: Map, label: "My Trips", path: "/trips" },
+  { icon: Bookmark, label: "Saved Places", path: "/saved" },
   { icon: Lightbulb, label: "Trip Tips", path: "/ai-guide" },
   { icon: Shield, label: "Safety", path: "/safety" },
 ];

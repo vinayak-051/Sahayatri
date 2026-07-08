@@ -104,6 +104,17 @@ const LocationDetail = () => {
     fetchLocation();
   }, [fetchLocation]);
 
+  useEffect(() => {
+    if (!user || !id) return;
+    supabase
+      .from("saved_locations")
+      .select("location_id")
+      .eq("user_id", user.id)
+      .eq("location_id", id)
+      .maybeSingle()
+      .then(({ data }) => setIsSaved(!!data));
+  }, [user, id]);
+
   const fetchReviews = useCallback(async () => {
     if (!id) return;
     const { data, error } = await supabase
@@ -168,11 +179,25 @@ const LocationDetail = () => {
   }, [user, location, fetchMyRequest]);
 
   const handleSave = async () => {
-    if (!location || isSaved) return;
+    if (!location || !user) return;
+    if (isSaved) {
+      const { error } = await supabase
+        .from("saved_locations")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("location_id", location.id);
+      if (error) {
+        toast.error("Couldn't remove this spot right now.");
+        return;
+      }
+      setIsSaved(false);
+      setLocation({ ...location, saves_count: Math.max((location.saves_count || 0) - 1, 0) });
+      toast.success("Removed from your saved spots.");
+      return;
+    }
     const { error } = await supabase
-      .from("locations")
-      .update({ saves_count: (location.saves_count || 0) + 1 })
-      .eq("id", location.id);
+      .from("saved_locations")
+      .insert({ user_id: user.id, location_id: location.id });
     if (error) {
       toast.error("Couldn't save this spot right now.");
       return;
@@ -317,7 +342,7 @@ const LocationDetail = () => {
         <button aria-label="Go back" onClick={() => navigate("/explore")} className="absolute top-6 left-6 z-10 p-2 glass rounded-full shadow-card active:scale-95 transition-transform">
           <ArrowLeft size={20} className="text-foreground" />
         </button>
-        <button aria-label="Save to favorites" onClick={handleSave} disabled={isSaved} className="absolute top-6 right-6 z-10 p-2 glass rounded-full shadow-card active:scale-95 transition-transform disabled:opacity-60">
+        <button aria-label={isSaved ? "Remove from favorites" : "Save to favorites"} onClick={handleSave} className="absolute top-6 right-6 z-10 p-2 glass rounded-full shadow-card active:scale-95 transition-transform">
           <Bookmark size={18} className={isSaved ? "text-accent fill-accent" : "text-foreground"} />
         </button>
         {location.photos?.length > 1 && (
@@ -618,11 +643,19 @@ const LocationDetail = () => {
                   />
                 </div>
 
-                <div className="flex items-center justify-between bg-white/5 rounded-xl px-4 py-3">
-                  <span className="text-xs text-white/60">Total ({requestPeople} {requestPeople === 1 ? "person" : "people"})</span>
-                  <span className="text-sm font-bold text-white">
-                    {location.price_per_person != null ? `₹${(location.price_per_person * requestPeople).toLocaleString()}` : "To be discussed with guide"}
-                  </span>
+                <div className="bg-white/5 rounded-xl px-4 py-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-white/60">Guide Fee ({requestPeople} {requestPeople === 1 ? "person" : "people"})</span>
+                    <span className="text-xs font-medium text-white/80">
+                      {location.price_per_person != null ? `₹${(location.price_per_person * requestPeople).toLocaleString()}` : "To be discussed with guide"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between pt-2 border-t border-white/10">
+                    <span className="text-xs font-semibold text-white">Total</span>
+                    <span className="text-sm font-bold text-white">
+                      {location.price_per_person != null ? `₹${(location.price_per_person * requestPeople).toLocaleString()}` : "To be discussed with guide"}
+                    </span>
+                  </div>
                 </div>
 
                 <button

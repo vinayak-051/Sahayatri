@@ -71,7 +71,7 @@ const Safety = () => {
   return (
     <div className="min-h-screen gradient-sky pb-20">
       <div className="px-6 pt-6 pb-4 flex items-center gap-3">
-        <button onClick={() => navigate(-1)} className="p-1"><ArrowLeft size={22} className="text-foreground" /></button>
+        <button aria-label="Go back" onClick={() => navigate(-1)} className="p-1"><ArrowLeft size={22} className="text-foreground" /></button>
         <h1 className="text-lg font-bold text-foreground">Safety</h1>
       </div>
 
@@ -109,6 +109,9 @@ const Safety = () => {
               </div>
             </div>
             <button
+              role="switch"
+              aria-checked={locationSharing}
+              aria-label="Toggle live location sharing"
               onClick={toggleLocationSharing}
               disabled={gettingLocation}
               className={`w-12 h-6 rounded-full relative transition-colors duration-200 ${
@@ -146,6 +149,7 @@ const Safety = () => {
                 <div className="flex items-center gap-2 bg-secondary/50 rounded-xl px-3 py-2">
                   <p className="text-xs text-foreground flex-1 truncate">{locationLink}</p>
                   <button
+                    aria-label={copied ? "Link copied" : "Copy location link"}
                     onClick={copyLink}
                     className="shrink-0 w-7 h-7 rounded-lg gradient-primary flex items-center justify-center"
                   >
@@ -177,6 +181,7 @@ const Safety = () => {
                 <p className="text-xs text-muted-foreground">{c.number}</p>
               </div>
               <button
+                aria-label={`Call ${c.name}`}
                 onClick={() => handleCall(c.number)}
                 className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center active:opacity-80 transition-opacity"
               >

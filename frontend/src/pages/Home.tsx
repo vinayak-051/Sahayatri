@@ -10,8 +10,7 @@ import type { Profile, BuddyTrip, Location } from "@/types/database";
 import heroImg from "@/assets/hero-travel.jpg";
 import logo from "@/assets/logo.png";
 
-const features = [
-  { icon: Compass, title: "Find a Guide", subtitle: "Local experts near you", color: "gradient-primary", path: "/guides" },
+const secondaryFeatures = [
   { icon: Users, title: "Travel Buddy", subtitle: "Find travel companions", color: "gradient-accent", path: "/travel-buddy" },
   { icon: Map, title: "Map View", subtitle: "Explore on map", color: "gradient-primary", path: "/map" },
   { icon: MessageCircle, title: "Messages", subtitle: "Chat with guides", color: "gradient-accent", path: "/messages" },
@@ -88,7 +87,7 @@ const Home = () => {
             Hello, {user?.name?.split(" ")[0] || "Traveler"} 👋
           </motion.p>
           <motion.h1 initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.1 }} className="text-2xl font-bold text-primary-foreground mt-1">
-            Where do you want to go?
+            Explore India with Verified Local Guides
           </motion.h1>
         </div>
       </div>
@@ -177,24 +176,37 @@ const Home = () => {
       )}
 
       <div className="px-6 mt-8">
-        <h2 className="text-[1.07rem] font-bold text-foreground mb-4">Explore Features</h2>
-        <div className="grid grid-cols-2 gap-4">
-          {features.map((f, i) => (
+        <motion.button
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.3 }}
+          onClick={() => navigate("/guides")}
+          className="w-full gradient-primary rounded-3xl p-6 flex items-center gap-4 shadow-glow card-lift text-left"
+        >
+          <div className="w-16 h-16 rounded-2xl bg-white/15 flex items-center justify-center shrink-0">
+            <Compass size={32} className="text-primary-foreground" />
+          </div>
+          <div className="flex-1">
+            <span className="block text-lg font-bold text-primary-foreground">Find a Guide</span>
+            <span className="block text-xs text-primary-foreground/80 mt-0.5">Book verified local experts near you</span>
+          </div>
+        </motion.button>
+
+        <h2 className="text-sm font-semibold text-muted-foreground mt-6 mb-3">More ways to explore</h2>
+        <div className="grid grid-cols-3 gap-3">
+          {secondaryFeatures.map((f, i) => (
             <motion.button
               key={f.title}
               initial={{ y: 20, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.3 + i * 0.1 }}
+              transition={{ delay: 0.4 + i * 0.1 }}
               onClick={() => navigate(f.path)}
-              className="glass rounded-3xl p-5 flex flex-col items-center gap-3 shadow-elevated card-lift"
+              className="glass rounded-2xl p-3.5 flex flex-col items-center gap-2 shadow-card card-lift"
             >
-              <div className={`w-16 h-16 rounded-2xl ${f.color} flex items-center justify-center shadow-lg`}>
-                <f.icon size={32} className="text-primary-foreground" />
+              <div className={`w-10 h-10 rounded-xl ${f.color} flex items-center justify-center shadow-lg`}>
+                <f.icon size={18} className="text-primary-foreground" />
               </div>
-              <div className="flex flex-col items-center gap-1">
-                <span className="text-sm font-bold text-foreground text-center">{f.title}</span>
-                <span className="text-xs text-muted-foreground text-center">{f.subtitle}</span>
-              </div>
+              <span className="text-[11px] font-bold text-foreground text-center leading-tight">{f.title}</span>
             </motion.button>
           ))}
         </div>

@@ -107,16 +107,17 @@ const Guides = () => {
                     <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded-full font-bold">VERIFIED ✅</span>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
-                  <MapPin size={10} /> {g.city || "India"}
+                <p className="text-xs font-medium text-foreground/80 mt-0.5 flex items-center gap-1">
+                  <MapPin size={11} className="text-primary/70" /> {g.city || "India"}
                 </p>
-                <div className="flex items-center gap-2 mt-1.5">
-                  <span className="flex items-center gap-0.5 text-xs text-foreground">
-                    <Star size={12} className="text-accent fill-accent" /> {g.rating || "New"}
+                <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                  <span className="flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
+                    <Star size={11} className="text-accent fill-accent" /> {g.rating > 0 ? g.rating.toFixed(1) : "New"}
                   </span>
                   {g.languages?.length > 0 && (
-                    <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
-                      <Globe size={10} /> {g.languages.length} lang
+                    <span className="flex items-center gap-1 text-[10px] font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-full">
+                      <Globe size={10} /> {g.languages.slice(0, 2).join(", ")}
+                      {g.languages.length > 2 ? ` +${g.languages.length - 2}` : ""}
                     </span>
                   )}
                 </div>

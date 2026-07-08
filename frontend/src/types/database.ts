@@ -127,6 +127,13 @@ export interface LocationReview {
   reviewer?: Pick<Profile, "id" | "name" | "role" | "profile_photo_url">;
 }
 
+export interface SavedLocation {
+  user_id: string;
+  location_id: string;
+  created_at: string;
+  location?: Location;
+}
+
 export interface Report {
   id: string;
   location_id: string;

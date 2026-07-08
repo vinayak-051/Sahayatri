@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Search, Send, ArrowLeft } from "lucide-react";
+import { toast } from "sonner";
 import BottomNav from "@/components/BottomNav";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/lib/supabaseClient";
@@ -25,18 +26,26 @@ const Messages = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [loadingConversations, setLoadingConversations] = useState(true);
+  const [loadingMessages, setLoadingMessages] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
 
   const fetchConversations = useCallback(async () => {
     if (!user) return;
+    setLoadingConversations(true);
     const { data, error } = await supabase
       .from("messages")
       .select("*")
       .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
       .order("created_at", { ascending: false });
-    if (error || !data) return;
+    if (error || !data) {
+      console.error("Failed to fetch conversations:", error?.message);
+      toast.error("Couldn't load your messages right now.");
+      setLoadingConversations(false);
+      return;
+    }
 
     const byPartner = new Map<string, Message>();
     const unreadByPartner = new Set<string>();
@@ -49,6 +58,7 @@ const Messages = () => {
     const partnerIds = Array.from(byPartner.keys());
     if (partnerIds.length === 0) {
       setConversations([]);
+      setLoadingConversations(false);
       return;
     }
     const { data: profiles } = await supabase.from("profiles").select("id, name, role, is_verified").in("id", partnerIds);
@@ -68,11 +78,13 @@ const Messages = () => {
         };
       })
     );
+    setLoadingConversations(false);
   }, [user]);
 
   const fetchMessages = useCallback(
     async (partnerId: string) => {
       if (!user) return;
+      setLoadingMessages(true);
       const { data, error } = await supabase
         .from("messages")
         .select("*")
@@ -81,7 +93,11 @@ const Messages = () => {
       if (!error) {
         setMessages((data ?? []) as Message[]);
         setTimeout(scrollToBottom, 100);
+      } else {
+        console.error("Failed to fetch messages:", error.message);
+        toast.error("Couldn't load this conversation right now.");
       }
+      setLoadingMessages(false);
       await supabase.from("messages").update({ is_read: true }).eq("sender_id", partnerId).eq("receiver_id", user.id).eq("is_read", false);
     },
     [user]
@@ -128,7 +144,11 @@ const Messages = () => {
     const content = input.trim();
     setInput("");
     const { error } = await supabase.from("messages").insert({ sender_id: user.id, receiver_id: activeChat.id, content });
-    if (error) console.error("Failed to send message:", error.message);
+    if (error) {
+      console.error("Failed to send message:", error.message);
+      toast.error("Message failed to send.");
+      setInput(content);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -142,7 +162,7 @@ const Messages = () => {
     return (
       <div className="flex flex-col h-screen gradient-sky overflow-hidden">
         <div className="glass px-4 py-3 flex items-center gap-3 border-b border-border z-10">
-          <button onClick={() => { setActiveChat(null); navigate("/messages"); }} className="p-1">
+          <button aria-label="Back to messages" onClick={() => { setActiveChat(null); navigate("/messages"); }} className="p-1">
             <ArrowLeft size={20} className="text-foreground" />
           </button>
           <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-lg font-bold text-primary">
@@ -150,11 +170,15 @@ const Messages = () => {
           </div>
           <div>
             <h2 className="text-sm font-semibold text-foreground">{activeChat.name}</h2>
-            <p className="text-[10px] text-primary">In Chat • Private</p>
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 pb-24">
+          {loadingMessages && (
+            <div className="flex justify-center py-6">
+              <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            </div>
+          )}
           {messages.map((msg) => (
             <motion.div key={msg.id} initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className={`flex ${msg.sender_id === user?.id ? "justify-end" : "justify-start"}`}>
               <div className={`max-w-[75%] px-4 py-3 rounded-2xl text-sm shadow-sm ${msg.sender_id === user?.id ? "gradient-primary text-primary-foreground rounded-br-md" : "glass text-foreground rounded-bl-md border border-primary/5"}`}>
@@ -177,7 +201,7 @@ const Messages = () => {
               placeholder="Type a message..."
               className="flex-1 bg-secondary/50 border border-border rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
-            <button onClick={sendMessage} className="w-12 h-12 rounded-xl gradient-primary flex items-center justify-center shadow-glow active:scale-95 transition-transform">
+            <button aria-label="Send message" onClick={sendMessage} className="w-12 h-12 rounded-xl gradient-primary flex items-center justify-center shadow-glow active:scale-95 transition-transform">
               <Send size={20} className="text-primary-foreground" />
             </button>
           </div>
@@ -204,7 +228,11 @@ const Messages = () => {
       </div>
 
       <div className="px-6 space-y-2">
-        {conversations.filter((c) => !searchQuery || c.userName.toLowerCase().includes(searchQuery.toLowerCase())).length > 0 ? (
+        {loadingConversations ? (
+          <div className="flex justify-center py-16">
+            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : conversations.filter((c) => !searchQuery || c.userName.toLowerCase().includes(searchQuery.toLowerCase())).length > 0 ? (
           conversations.filter((c) => !searchQuery || c.userName.toLowerCase().includes(searchQuery.toLowerCase())).map((c, i) => (
             <motion.button
               key={c.userId}

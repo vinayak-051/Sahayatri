@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Mail, Lock, User, Eye, EyeOff } from "lucide-react";
 import heroImg from "@/assets/hero-travel.jpg";
 import { useAuth } from "@/context/AuthContext";
+import { friendlyAuthError } from "@/lib/authErrors";
 
 const loginSchema = z.object({
   name: z.string().optional(),
@@ -55,7 +56,7 @@ const Auth = () => {
       if (isLogin) {
         const { error } = await login(values.email, values.password);
         if (error) {
-          toast.error(error);
+          toast.error(friendlyAuthError(error));
           return;
         }
         navigate("/home");
@@ -67,7 +68,7 @@ const Auth = () => {
           role: "traveler",
         });
         if (error) {
-          toast.error(error);
+          toast.error(friendlyAuthError(error));
           return;
         }
         if (needsEmailConfirmation) {
@@ -89,7 +90,7 @@ const Auth = () => {
 
   const handleGoogle = async () => {
     const { error } = await loginWithGoogle("/complete-profile?role=traveler");
-    if (error) toast.error(error);
+    if (error) toast.error(friendlyAuthError(error));
   };
 
   return (
@@ -125,7 +126,7 @@ const Auth = () => {
                     type="text"
                     placeholder="Full Name"
                     {...register("name")}
-                    className="w-full pl-11 pr-11 py-3.5 rounded-xl bg-secondary/50 border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 [::-ms-reveal]:hidden [::-ms-clear]:hidden"
+                    className="w-full pl-11 pr-11 py-3.5 rounded-xl bg-secondary/50 border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
                   />
                 </div>
                 {errors.name && <p className="text-xs text-destructive mt-1 ml-1">{errors.name.message}</p>}
@@ -156,6 +157,7 @@ const Auth = () => {
                 />
                 <button
                   type="button"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground"
                 >
