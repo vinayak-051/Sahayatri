@@ -68,7 +68,8 @@ const ResetPassword = () => {
         toast.error(error.message);
         return;
       }
-      toast.success("Password updated. You can sign in now.");
+      await supabase.auth.signOut();
+      toast.success("Password updated. Please sign in with your new password.");
       navigate("/auth");
     } finally {
       setLoading(false);

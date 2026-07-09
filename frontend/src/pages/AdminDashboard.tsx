@@ -290,6 +290,7 @@ const AdminDashboard = () => {
       .from("profiles")
       .select("id, name, email, city, profile_photo_url, created_at")
       .eq("role", "traveler")
+      .neq("is_admin", true)
       .order("created_at", { ascending: false })
       .limit(200);
     if (error) toast.error("Failed to load travelers");
@@ -300,8 +301,8 @@ const AdminDashboard = () => {
   const fetchStats = useCallback(async () => {
     setLoading(true);
     const [travelersRes, guidesRes, bookingsRes, buddyRes] = await Promise.all([
-      supabase.from("profiles").select("*", { count: "exact", head: true }).eq("role", "traveler"),
-      supabase.from("profiles").select("id, is_verified").eq("role", "guide"),
+      supabase.from("profiles").select("*", { count: "exact", head: true }).eq("role", "traveler").neq("is_admin", true),
+      supabase.from("profiles").select("id, is_verified").eq("role", "guide").neq("is_admin", true),
       supabase.from("bookings").select("id, status, amount"),
       supabase.from("buddy_trips").select("*", { count: "exact", head: true }),
     ]);
@@ -331,6 +332,7 @@ const AdminDashboard = () => {
       .from("profiles")
       .select("id, name, email, city, rating, is_verified, profile_photo_url, created_at, rate_per_day, specialization")
       .eq("role", "guide")
+      .neq("is_admin", true)
       .order("created_at", { ascending: false });
 
     if (guideFilter === "unverified") query = query.eq("is_verified", false);

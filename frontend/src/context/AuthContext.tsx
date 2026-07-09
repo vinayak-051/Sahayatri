@@ -71,7 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(data.session);
       if (data.session?.user) {
         const profile = await fetchProfile(data.session.user.id);
-        if (profile?.is_admin && window.location.pathname !== "/admin") {
+        if (profile?.is_admin && window.location.pathname !== "/admin" && window.location.pathname !== "/reset-password") {
           navigate("/admin");
         }
       }
@@ -79,6 +79,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+      // Navigate to reset form immediately without loading profile so pages
+      // like Auth.tsx don't see a user and redirect away before the form loads.
+      if (event === "PASSWORD_RECOVERY") {
+        navigate("/reset-password");
+        setIsLoading(false);
+        return;
+      }
       setSession(newSession);
       if (newSession?.user) {
         const profile = await fetchProfile(newSession.user.id);
@@ -89,11 +96,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
       }
       setIsLoading(false);
-      // A recovery link can land anywhere (e.g. Supabase dashboard's manual
-      // "send recovery email" ignores our resetPasswordForEmail redirectTo
-      // and falls back to the project's Site URL, usually "/"), so force the
-      // user to the actual reset form instead of wherever the link redirected.
-      if (event === "PASSWORD_RECOVERY") navigate("/reset-password");
     });
 
     return () => {

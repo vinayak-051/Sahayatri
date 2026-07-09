@@ -56,7 +56,7 @@ const AIGuide = () => {
           <Lightbulb size={16} className="text-primary-foreground" />
         </div>
         <div>
-          <h1 className="text-sm font-semibold text-foreground">Trip Tips</h1>
+          <h1 className="text-sm font-semibold text-foreground">AI Guide</h1>
           <p className="text-[10px] text-muted-foreground">Practical checklists, not AI-generated</p>
         </div>
       </div>

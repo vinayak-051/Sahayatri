@@ -21,6 +21,7 @@ const ForgotPassword = () => {
 
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
+  const [roleError, setRoleError] = useState<string | null>(null);
 
   const {
     register,
@@ -28,9 +29,29 @@ const ForgotPassword = () => {
     formState: { errors },
   } = useForm<FormValues>({ resolver: zodResolver(schema) });
 
+  const adminEmail = import.meta.env.VITE_ADMIN_EMAIL as string | undefined;
+
   const onSubmit = async ({ email }: FormValues) => {
     setLoading(true);
+    setRoleError(null);
     try {
+      const isAdmin = adminEmail && email.toLowerCase() === adminEmail.toLowerCase();
+
+      if (!isAdmin) {
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("email", email)
+          .eq("role", role);
+
+        if (!profiles || profiles.length === 0) {
+          setRoleError(
+            `No ${role === "guide" ? "guide" : "traveller"} account found for this email.`
+          );
+          return;
+        }
+      }
+
       await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/reset-password`,
       });
@@ -69,7 +90,7 @@ const ForgotPassword = () => {
           <div className="glass rounded-3xl p-6 space-y-4">
             {sent ? (
               <p className="text-sm text-center text-foreground">
-                If an account exists for that email, a reset link has been sent. Check your inbox.
+                A reset link has been sent to your email. Check your inbox.
               </p>
             ) : (
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -84,6 +105,7 @@ const ForgotPassword = () => {
                     />
                   </div>
                   {errors.email && <p className="text-xs text-destructive mt-1 ml-1">{errors.email.message}</p>}
+                  {roleError && <p className="text-xs text-destructive mt-1 ml-1">{roleError}</p>}
                 </div>
 
                 <button

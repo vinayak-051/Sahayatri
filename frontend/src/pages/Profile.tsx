@@ -13,7 +13,7 @@ const baseMenuItems = [
   { icon: Compass, label: "Become a Guide", path: "/role-select" },
   { icon: Map, label: "My Trips", path: "/trips" },
   { icon: Bookmark, label: "Saved Places", path: "/saved" },
-  { icon: Lightbulb, label: "Trip Tips", path: "/ai-guide" },
+  { icon: Lightbulb, label: "AI Guide", path: "/ai-guide" },
   { icon: Shield, label: "Safety", path: "/safety" },
 ];
 

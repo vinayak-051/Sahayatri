@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { MapPin, Globe, Camera, Lock, Eye, EyeOff } from "lucide-react";
+import { MapPin, Globe, Camera } from "lucide-react";
 import heroImg from "@/assets/hero-travel.jpg";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
@@ -15,12 +15,6 @@ const schema = z.object({
   city: z.string().optional(),
   languages: z.string().optional(),
   specialization: z.string().optional(),
-  password: z
-    .string()
-    .optional()
-    .refine((v) => !v || (v.length >= 8 && /[A-Z]/.test(v) && /[0-9]/.test(v)), {
-      message: "Password must be 8+ characters with an uppercase letter and a number",
-    }),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -31,9 +25,19 @@ const CompleteProfile = () => {
 
   const [loading, setLoading] = useState(false);
   const [role, setRole] = useState<Role>(presetRole ?? "traveler");
-  const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
   const { user, refreshProfile, logout } = useAuth();
+
+  useEffect(() => {
+    if (!user) return;
+    if (user.is_admin) { navigate("/admin", { replace: true }); return; }
+    // Only skip the form if already onboarded AND the stored role matches
+    // the page they came from. If they're stored as traveler but selected
+    // the guide login, fall through to show the guide profile form.
+    if (user.onboarded && (!presetRole || presetRole === user.role)) {
+      navigate(user.role === "guide" ? "/guide-dashboard" : "/home", { replace: true });
+    }
+  }, [user, navigate, presetRole]);
 
   const {
     register,
@@ -49,14 +53,6 @@ const CompleteProfile = () => {
     }
     setLoading(true);
     try {
-      if (values.password) {
-        const { error: passwordError } = await supabase.auth.updateUser({ password: values.password });
-        if (passwordError) {
-          toast.error(passwordError.message);
-          return;
-        }
-      }
-
       const { error } = await supabase
         .from("profiles")
         .update({
@@ -103,19 +99,15 @@ const CompleteProfile = () => {
           <div className="text-center mb-6">
             <h1 className="text-2xl font-bold text-primary-foreground">One last step</h1>
             <p className="text-primary-foreground/60 text-sm mt-1">
-              {presetRole ? "Set a password so you can log in directly next time" : "Tell us how you'll use Sahayatri"}
+              {presetRole ? "Just a few details to finish setup" : "Tell us how you'll use Sahayatri"}
             </p>
           </div>
 
           <form onSubmit={handleSubmit(onSubmit)} className="glass rounded-3xl p-6 space-y-4">
             {presetRole ? (
-              <div
-                className={`py-4 rounded-xl text-center text-sm font-medium ${
-                  presetRole === "guide" ? "gradient-accent text-accent-foreground shadow-accent-glow" : "gradient-primary text-primary-foreground shadow-glow"
-                }`}
-              >
+              <p className="text-sm text-center text-muted-foreground">
                 {presetRole === "guide" ? "🧭 Signing up as a Guide" : "🎒 Signing up as a Traveler"}
-              </div>
+              </p>
             ) : (
               <div className="grid grid-cols-2 gap-3">
                 <button
@@ -161,28 +153,6 @@ const CompleteProfile = () => {
                 </div>
               </>
             )}
-
-            <div>
-              <div className="relative">
-                <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Set a password (optional)"
-                  {...register("password")}
-                  className="w-full pl-11 pr-11 py-3 rounded-xl bg-secondary/50 border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                />
-                <button
-                  type="button"
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground"
-                >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
-              {errors.password && <p className="text-xs text-destructive mt-1 ml-1">{errors.password.message}</p>}
-              <p className="text-xs text-muted-foreground mt-1 ml-1">Set this to also sign in with email + password later.</p>
-            </div>
 
             <button
               type="submit"
