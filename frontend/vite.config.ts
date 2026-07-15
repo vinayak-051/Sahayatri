@@ -16,7 +16,7 @@ export default defineConfig(() => ({
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
-    dedupe: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime", "@tanstack/react-query", "@tanstack/query-core"],
+    dedupe: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime"],
   },
   build: {
     rollupOptions: {
@@ -24,7 +24,6 @@ export default defineConfig(() => ({
         manualChunks: {
           "vendor-react": ["react", "react-dom", "react-router-dom"],
           "vendor-supabase": ["@supabase/supabase-js"],
-          "vendor-query": ["@tanstack/react-query"],
           "vendor-motion": ["framer-motion"],
           "vendor-leaflet": ["leaflet", "react-leaflet"],
           "vendor-form": ["react-hook-form", "@hookform/resolvers", "zod"],
