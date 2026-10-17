@@ -146,8 +146,9 @@ async function main() {
   for (const g of GUIDES) {
     const user = await getOrCreateUser({ ...g, role: "guide" });
     // rate_per_day isn't carried by the new-user trigger (it only reads
-    // signup metadata), so set it explicitly here.
-    const { error: rateError } = await supabaseAdmin.from("profiles").update({ rate_per_day: g.ratePerDay }).eq("id", user.id);
+    // signup metadata), so set it explicitly here. Demo guides are pre-verified
+    // so they show in Explore and can accept bookings.
+    const { error: rateError } = await supabaseAdmin.from("profiles").update({ rate_per_day: g.ratePerDay, is_verified: true }).eq("id", user.id);
     if (rateError) throw rateError;
     guides.push({ ...g, id: user.id });
   }
@@ -175,6 +176,19 @@ async function main() {
   const locations = [];
   for (const spec of locationSpecs) {
     const guide = guideByCity[spec.city];
+    // Reuse the spot from a previous run instead of inserting a duplicate.
+    const { data: existing, error: findError } = await supabaseAdmin
+      .from("locations")
+      .select()
+      .eq("guide_id", guide.id)
+      .eq("title", spec.title)
+      .limit(1)
+      .maybeSingle();
+    if (findError) throw findError;
+    if (existing) {
+      locations.push(existing);
+      continue;
+    }
     const { data, error } = await supabaseAdmin
       .from("locations")
       .insert({
