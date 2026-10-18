@@ -155,6 +155,24 @@ async function main() {
   const guideByCity = Object.fromEntries(guides.map((g) => [g.city, g]));
 
   console.log("Seeding locations...");
+  // Freely licensed Wikimedia Commons photos, hotlinked as 960px thumbnails.
+  const SPOT_PHOTOS = {
+    "Amber Fort": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/fb/20191219_Fort_Amber%2C_Amer%2C_Jaipur_0955_9481.jpg/960px-20191219_Fort_Amber%2C_Amer%2C_Jaipur_0955_9481.jpg",
+    "City Palace Jaipur": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a4/Chandra_Mahal%2C_City_Palace%2C_Jaipur%2C_20191218_0951_9043.jpg/960px-Chandra_Mahal%2C_City_Palace%2C_Jaipur%2C_20191218_0951_9043.jpg",
+    "Fort Kochi Beach Walk": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ed/Sunset_with_Chinese_Fishing_Nets%2C_Fort_Kochi_1.jpg/960px-Sunset_with_Chinese_Fishing_Nets%2C_Fort_Kochi_1.jpg",
+    "Alleppey Backwaters Cruise": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ee/House_Boat_DSW.jpg/960px-House_Boat_DSW.jpg",
+    "Pangong Lake Road Trip": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/cf/Pangong_Tso_in_eastern_Ladakh%28Changthang%29.jpg/960px-Pangong_Tso_in_eastern_Ladakh%28Changthang%29.jpg",
+    "Shanti Stupa Sunset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/14/Shanti_Stupa%2C_Leh%2C_20180814.jpg/960px-Shanti_Stupa%2C_Leh%2C_20180814.jpg",
+    "Ganga Ghat Sunrise Boat Ride": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/04/Ahilya_Ghat_by_the_Ganges%2C_Varanasi.jpg/960px-Ahilya_Ghat_by_the_Ganges%2C_Varanasi.jpg",
+    "Sarnath Heritage Walk": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d9/Ancient_Buddhist_monasteries_near_Dhamekh_Stupa_Monument_Site%2C_Sarnath.jpg/960px-Ancient_Buddhist_monasteries_near_Dhamekh_Stupa_Monument_Site%2C_Sarnath.jpg",
+    "Lake Pichola Sunset Cruise": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d2/Udaipur_Lake_India.JPG/960px-Udaipur_Lake_India.JPG",
+    "City Palace Udaipur": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/69/Udaipur_City_Palace.jpg/960px-Udaipur_City_Palace.jpg",
+    "Meenakshi Amman Temple Tour": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c6/S-TN-34_Meenakshi_Amman_Temple_South_Gopuram_enriched_with_delicate_Stucco_works.jpg/960px-S-TN-34_Meenakshi_Amman_Temple_South_Gopuram_enriched_with_delicate_Stucco_works.jpg",
+    "Thirumalai Nayakkar Palace": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/04/S-TN-23_Thirumalai_Naicker_Palace_Madurai_1.jpg/960px-S-TN-23_Thirumalai_Naicker_Palace_Madurai_1.jpg",
+    "Charminar & Old City Food Walk": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/71/Charminar_Hyderabad_1.jpg/960px-Charminar_Hyderabad_1.jpg",
+    "Golconda Fort Sound & Light": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1a/Golconda_Fort_and_Hyderabad_city.jpg/960px-Golconda_Fort_and_Hyderabad_city.jpg",
+    "Tsomgo Lake Day Trip": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/24/Tsomgo_Lake_alias_Tsongmo_Lake_or_Changgu_Lake_in_East_Sikkim_02.jpg/960px-Tsomgo_Lake_alias_Tsongmo_Lake_or_Changgu_Lake_in_East_Sikkim_02.jpg",
+  };
   const locationSpecs = [
     { city: "Jaipur", title: "Amber Fort", short: "A majestic hilltop fort overlooking Maan Sagar Lake.", category: "Heritage", lat: 26.9855, lng: 75.8513, tags: ["fort", "heritage", "history"], price: "₹500 per person", time: "Oct - Mar" },
     { city: "Jaipur", title: "City Palace Jaipur", short: "Royal palace complex blending Rajput and Mughal architecture.", category: "Heritage", lat: 26.9258, lng: 75.8237, tags: ["palace", "royal", "museum"], price: "₹700 per person", time: "Year round" },
@@ -201,6 +219,8 @@ async function main() {
         tags: spec.tags,
         best_visiting_time: spec.time,
         pricing: spec.price,
+        price_per_person: Number(spec.price.replace(/[^\d]/g, "")),
+        photos: SPOT_PHOTOS[spec.title] ? [SPOT_PHOTOS[spec.title]] : [],
         timings: "9:00 AM - 6:00 PM",
         safety_level: "high",
         difficulty: "easy",
