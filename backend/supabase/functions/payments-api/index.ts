@@ -21,7 +21,7 @@ const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPAB
 const RAZORPAY_KEY_ID = Deno.env.get("RAZORPAY_KEY_ID")!;
 const RAZORPAY_KEY_SECRET = Deno.env.get("RAZORPAY_KEY_SECRET")!;
 
-const COMMISSION_RATE = 0.15;
+const COMMISSION_RATE = 0.15; // keep in sync with process_payment_captured
 const CANCELLATION_FEE_RATE = 0.10;
 const CANCELLATION_WINDOW_DAYS = 5;
 
@@ -57,7 +57,8 @@ Deno.serve(async (req) => {
   const { data: booking } = await supabase.from("bookings").select("*").eq("id", booking_id).single();
   if (!booking || booking.traveler_id !== user.id) return json({ error: "Booking not found" }, 404);
 
-  // integer paise everywhere so the two halves always sum to the exact total
+  // integer paise everywhere so the two halves always sum to the exact total.
+  // booking.amount is set by the database (prepare_booking), never by the client.
   const totalPaise = Math.round(Number(booking.amount) * 100);
   const advancePaise = Math.round(totalPaise / 2);
   const finalPaise = totalPaise - advancePaise;
@@ -82,25 +83,30 @@ Deno.serve(async (req) => {
       }
 
       const paise = stage === "advance" ? advancePaise : finalPaise;
+      if (paise < 100) {
+        return json({ error: "This trip has no online price yet. Please arrange payment with your guide." }, 400);
+      }
       const order = await razorpay("/orders", {
         amount: paise,
         currency: "INR",
         receipt: booking.id,
         notes: { booking_id: booking.id, stage },
       });
-      await supabase.from("payments").insert({
+      const { error: insertError } = await supabase.from("payments").insert({
         booking_id: booking.id,
         stage,
         razorpay_order_id: order.id,
         amount: paise / 100,
       });
+      if (insertError) throw insertError;
       return json({ order_id: order.id, amount: paise, currency: "INR", key_id: RAZORPAY_KEY_ID });
     }
 
     if (action === "cancel") {
       if (["pending", "accepted"].includes(booking.status)) {
         // nothing paid yet: plain cancellation, no refund needed
-        await supabase.from("bookings").update({ status: "cancelled" }).eq("id", booking.id);
+        const { error: cancelError } = await supabase.from("bookings").update({ status: "cancelled" }).eq("id", booking.id);
+        if (cancelError) throw cancelError;
         return json({ cancelled: true, refund: 0, fee: 0 });
       }
       if (booking.status !== "confirmed") return json({ error: "This booking can no longer be cancelled" }, 400);
@@ -119,13 +125,16 @@ Deno.serve(async (req) => {
         // partial refund back to the traveler's original UPI/card
         await razorpay(`/payments/${advance.razorpay_payment_id}/refund`, { amount: refundPaise });
       }
-      await supabase.from("payments")
-        .update({ status: "refunded", refund_amount: refundPaise / 100 })
-        .eq("id", advance.id);
-      // fee is platform revenue: no guide_ledger rows on cancellation
-      await supabase.from("bookings")
-        .update({ status: "cancelled", cancellation_fee: feePaise / 100 })
-        .eq("id", booking.id);
+      // The refund has already been issued: record it even if one write fails, and
+      // log loudly so the two can be reconciled.
+      const [{ error: paymentError }, { error: bookingError }] = await Promise.all([
+        supabase.from("payments").update({ status: "refunded", refund_amount: refundPaise / 100 }).eq("id", advance.id),
+        // fee is platform revenue: no guide_ledger rows on cancellation
+        supabase.from("bookings").update({ status: "cancelled", cancellation_fee: feePaise / 100 }).eq("id", booking.id),
+      ]);
+      if (paymentError || bookingError) {
+        console.error("refund issued but not fully recorded", { booking: booking.id, paymentError, bookingError });
+      }
       return json({ cancelled: true, refund: refundPaise / 100, fee: feePaise / 100 });
     }
 
@@ -136,13 +145,15 @@ Deno.serve(async (req) => {
       }
       if (booking.date > today) return json({ error: "Cash payment can be confirmed only after the trip date" }, 400);
 
-      await supabase.from("bookings").update({ final_payment_mode: "cash" }).eq("id", booking.id);
+      const { error: modeError } = await supabase.from("bookings").update({ final_payment_mode: "cash" }).eq("id", booking.id);
+      if (modeError) throw modeError;
       // guide already holds the final 50% in cash, so the platform credits only
       // the advance it holds, minus the full commission on the total
-      await supabase.from("guide_ledger").insert([
+      const { error: ledgerError } = await supabase.from("guide_ledger").insert([
         { guide_id: booking.guide_id, booking_id: booking.id, type: "earning", amount: advancePaise / 100 },
         { guide_id: booking.guide_id, booking_id: booking.id, type: "commission", amount: -Math.round(totalPaise * COMMISSION_RATE) / 100 },
       ]);
+      if (ledgerError) throw ledgerError;
       return json({ ok: true });
     }
 

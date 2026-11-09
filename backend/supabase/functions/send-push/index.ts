@@ -1,7 +1,12 @@
 // Triggered by a Supabase Database Webhook on `insert into public.notifications`.
 // Delivers a real OS-level Web Push so the user is notified even with the
-// app/browser closed. See backend/migrations/0007_notifications.sql for the
-// trigger functions that create the rows this function reacts to.
+// app/browser closed. The notify_* triggers in supabase/migrations create the
+// rows this function reacts to.
+//
+// Only the database may call this: configure the webhook to send the header
+// `Authorization: Bearer <service role key>`. Anything else (for example the public
+// anon key, which ships in the frontend) is rejected, so nobody can push
+// arbitrary notifications to users.
 import webpush from "npm:web-push@3.6.7";
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
@@ -11,9 +16,13 @@ webpush.setVapidDetails(
   Deno.env.get("VAPID_PRIVATE_KEY")!
 );
 
-const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const supabase = createClient(Deno.env.get("SUPABASE_URL")!, serviceRoleKey);
 
 Deno.serve(async (req) => {
+  if (req.headers.get("Authorization") !== `Bearer ${serviceRoleKey}`) {
+    return new Response("unauthorized", { status: 401 });
+  }
   const { record } = await req.json();
   if (!record?.user_id) return new Response("ignored", { status: 200 });
 
