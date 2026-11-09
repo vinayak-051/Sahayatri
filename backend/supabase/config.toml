@@ -1,0 +1,9 @@
+# Supabase CLI configuration. Run CLI commands from the backend/ directory:
+#   supabase link --project-ref <ref>
+#   supabase db push            # applies supabase/migrations in order
+#   supabase functions deploy   # deploys supabase/functions/*
+project_id = "sahayatri"
+
+[functions.razorpay-webhook]
+# Razorpay calls this endpoint without a Supabase JWT; it verifies its own HMAC signature.
+verify_jwt = false
