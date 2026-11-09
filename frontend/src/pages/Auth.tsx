@@ -26,7 +26,8 @@ const signupSchema = z.object({
     .regex(/[0-9]/, "Include at least one number"),
 });
 
-type FormValues = z.infer<typeof signupSchema>;
+// One form serves both modes; `name` is only required (and validated) when signing up.
+type FormValues = z.infer<typeof loginSchema>;
 
 const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -64,7 +65,7 @@ const Auth = () => {
         const { error, needsEmailConfirmation } = await registerAccount({
           email: values.email,
           password: values.password,
-          name: values.name,
+          name: values.name ?? "",
           role: "traveler",
         });
         if (error) {
