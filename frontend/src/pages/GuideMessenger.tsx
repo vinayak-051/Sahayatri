@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Search, Send, ArrowLeft, Briefcase } from "lucide-react";
+import { toast } from "sonner";
 import GuideBottomNav from "@/components/GuideBottomNav";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/lib/supabaseClient";
+import { friendlyDbError } from "@/lib/dbErrors";
 import { useAuth } from "@/context/AuthContext";
 import type { Message } from "@/types/database";
 
@@ -125,7 +127,11 @@ const GuideMessenger = () => {
     const content = input.trim();
     setInput("");
     const { error } = await supabase.from("messages").insert({ sender_id: user.id, receiver_id: activeChat.id, content });
-    if (error) console.error("Failed to send message:", error.message);
+    if (error) {
+      console.error("Failed to send message:", error.message);
+      toast.error(friendlyDbError(error, "Message failed to send."));
+      setInput(content);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -177,6 +183,8 @@ const GuideMessenger = () => {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
+              maxLength={2000}
+              aria-label="Message"
               placeholder="Reply to traveler..."
               className="flex-1 bg-secondary/50 border border-border rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent/30"
             />

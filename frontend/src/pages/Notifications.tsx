@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Bell, Calendar, Check, X, MessageCircle } from "lucide-react";
+import { ArrowLeft, Bell, Calendar, Check, X, MessageCircle, IndianRupee, Users } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabaseClient";
@@ -12,16 +12,22 @@ const ICONS: Record<NotificationType, { icon: typeof Calendar; color: string }> 
   booking_requested: { icon: Calendar, color: "gradient-accent" },
   booking_accepted: { icon: Check, color: "gradient-primary" },
   booking_declined: { icon: X, color: "bg-destructive" },
+  booking_advance_paid: { icon: IndianRupee, color: "gradient-primary" },
   booking_cancelled: { icon: X, color: "bg-destructive" },
   new_message: { icon: MessageCircle, color: "gradient-primary" },
+  buddy_request_received: { icon: Users, color: "gradient-accent" },
+  buddy_request_accepted: { icon: Users, color: "gradient-primary" },
 };
 
 function getNotificationPath(n: AppNotification, isGuide: boolean): string | null {
   switch (n.type) {
-    case "booking_requested": return "/guide-bookings";
+    case "booking_requested":
+    case "booking_advance_paid": return "/guide-bookings";
     case "booking_accepted":
-    case "booking_declined":
-    case "booking_cancelled": return "/trips";
+    case "booking_declined": return "/trips";
+    case "booking_cancelled": return isGuide ? "/guide-bookings" : "/trips";
+    case "buddy_request_received":
+    case "buddy_request_accepted": return "/travel-buddy";
     case "new_message": {
       const senderId = n.data?.sender_id as string | undefined;
       const senderName = n.data?.sender_name as string | undefined;

@@ -52,7 +52,7 @@ const Home = () => {
     setSearching(true);
     try {
       const [{ data: guides }, { data: buddyTrips }] = await Promise.all([
-        supabase.from("profiles").select("*").eq("role", "guide").eq("is_verified", true).or(`name.ilike.%${searchQuery}%,city.ilike.%${searchQuery}%,specialization.ilike.%${searchQuery}%`),
+        supabase.from("profiles").select("id, name, city, specialization, is_verified, profile_photo_url, rating").eq("role", "guide").eq("is_verified", true).or(`name.ilike.%${searchQuery}%,city.ilike.%${searchQuery}%,specialization.ilike.%${searchQuery}%`),
         supabase
           .from("buddy_trips")
           .select("*, user:profiles!buddy_trips_user_id_fkey(id, name)")
@@ -240,7 +240,7 @@ const Home = () => {
                   <div className="absolute bottom-0 left-0 right-0 p-2">
                     <div className="flex items-center gap-1">
                       <MapPin size={8} className="text-accent" />
-                      <span className="text-primary-foreground text-[10px] font-bold truncate">{loc.guide?.city || loc.title}</span>
+                      <span className="text-primary-foreground text-[10px] font-bold truncate">{loc.city || loc.guide?.city || loc.title}</span>
                     </div>
                   </div>
                 </div>

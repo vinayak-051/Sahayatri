@@ -12,6 +12,7 @@ import {
   ResponsiveContainer, CartesianGrid,
 } from "recharts";
 import { supabase } from "@/lib/supabaseClient";
+import { friendlyDbError } from "@/lib/dbErrors";
 import { useAuth } from "@/context/AuthContext";
 import type { Profile, VerificationRequest } from "@/types/database";
 
@@ -241,7 +242,7 @@ const AdminDashboard = () => {
       const map: Record<string, { guide_name: string; balance: number }> = {};
       for (const row of data) {
         const id = row.guide_id as string;
-        const name = (row.profiles as { name: string } | null)?.name ?? "Unknown";
+        const name = (row.profiles as unknown as { name: string } | null)?.name ?? "Unknown";
         if (!map[id]) map[id] = { guide_name: name, balance: 0 };
         map[id].balance += Number(row.amount);
       }
@@ -257,13 +258,9 @@ const AdminDashboard = () => {
 
   const markPaid = async (guide_id: string, balance: number) => {
     setMarkingPayout(guide_id);
-    const { error } = await supabase.from("guide_ledger").insert({
-      guide_id,
-      type: "payout",
-      amount: -balance,
-    });
+    const { error } = await supabase.rpc("admin_record_payout", { p_guide_id: guide_id, p_amount: balance });
     if (error) {
-      toast.error("Failed to record payout");
+      toast.error(friendlyDbError(error, "Failed to record payout"));
     } else {
       toast.success(`Payout of ₹${balance.toLocaleString()} recorded`);
       fetchPayouts();
@@ -287,7 +284,7 @@ const AdminDashboard = () => {
   const fetchTravelers = useCallback(async () => {
     setTravelersLoading(true);
     const { data, error } = await supabase
-      .from("profiles")
+      .from("admin_profiles")
       .select("id, name, email, city, profile_photo_url, created_at")
       .eq("role", "traveler")
       .neq("is_admin", true)
@@ -301,7 +298,7 @@ const AdminDashboard = () => {
   const fetchStats = useCallback(async () => {
     setLoading(true);
     const [travelersRes, guidesRes, bookingsRes, buddyRes] = await Promise.all([
-      supabase.from("profiles").select("*", { count: "exact", head: true }).eq("role", "traveler").neq("is_admin", true),
+      supabase.from("profiles").select("id", { count: "exact", head: true }).eq("role", "traveler").neq("is_admin", true),
       supabase.from("profiles").select("id, is_verified").eq("role", "guide").neq("is_admin", true),
       supabase.from("bookings").select("id, status, amount"),
       supabase.from("buddy_trips").select("*", { count: "exact", head: true }),
@@ -329,7 +326,7 @@ const AdminDashboard = () => {
   const fetchGuides = useCallback(async () => {
     setLoading(true);
     let query = supabase
-      .from("profiles")
+      .from("admin_profiles")
       .select("id, name, email, city, rating, is_verified, profile_photo_url, created_at, rate_per_day, specialization")
       .eq("role", "guide")
       .neq("is_admin", true)
@@ -349,13 +346,22 @@ const AdminDashboard = () => {
     setLoading(true);
     let query = supabase
       .from("verification_requests")
-      .select("*, guide:profiles!verification_requests_guide_id_fkey(id, name, email, city, profile_photo_url)")
+      .select("*, guide:profiles!verification_requests_guide_id_fkey(id, name, city, profile_photo_url)")
       .order("created_at", { ascending: false })
       .limit(100);
     if (verifFilter === "pending") query = query.eq("status", "pending");
     const { data, error } = await query;
-    if (error) toast.error("Failed to load verification requests");
-    else setVerifRequests((data ?? []) as unknown as VerificationRequest[]);
+    if (error) {
+      toast.error("Failed to load verification requests");
+    } else {
+      const requests = (data ?? []) as unknown as VerificationRequest[];
+      const guideIds = [...new Set(requests.map((r) => r.guide_id))];
+      const { data: emails } = guideIds.length
+        ? await supabase.from("admin_profiles").select("id, email").in("id", guideIds)
+        : { data: [] as { id: string; email: string }[] };
+      const emailById = new Map((emails ?? []).map((e) => [e.id, e.email]));
+      setVerifRequests(requests.map((r) => (r.guide ? { ...r, guide: { ...r.guide, email: emailById.get(r.guide_id) } } : r)));
+    }
     setLoading(false);
   }, [verifFilter]);
 
@@ -544,18 +550,6 @@ const AdminDashboard = () => {
     if (activeTab === "bookings" && user?.is_admin) fetchBookings();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookingFilter]);
-
-  // Realtime guide changes
-  useEffect(() => {
-    const ch = supabase
-      .channel("admin-guides-rt")
-      .on("postgres_changes", { event: "*", schema: "public", table: "profiles", filter: "role=eq.guide" }, () => {
-        if (activeTab === "guides") fetchGuides();
-        else if (activeTab === "overview") fetchStats();
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(ch); };
-  }, [activeTab, fetchGuides, fetchStats]);
 
   const toggleVerify = async (guide: Profile) => {
     setTogglingId(guide.id);

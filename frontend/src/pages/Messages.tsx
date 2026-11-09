@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import BottomNav from "@/components/BottomNav";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/lib/supabaseClient";
+import { friendlyDbError } from "@/lib/dbErrors";
 import { useAuth } from "@/context/AuthContext";
 import type { Message } from "@/types/database";
 
@@ -146,7 +147,7 @@ const Messages = () => {
     const { error } = await supabase.from("messages").insert({ sender_id: user.id, receiver_id: activeChat.id, content });
     if (error) {
       console.error("Failed to send message:", error.message);
-      toast.error("Message failed to send.");
+      toast.error(friendlyDbError(error, "Message failed to send."));
       setInput(content);
     }
   };
@@ -198,6 +199,8 @@ const Messages = () => {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
+              maxLength={2000}
+              aria-label="Message"
               placeholder="Type a message..."
               className="flex-1 bg-secondary/50 border border-border rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
             />

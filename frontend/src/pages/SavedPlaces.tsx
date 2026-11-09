@@ -76,7 +76,7 @@ const SavedPlaces = () => {
               <div className="flex-1 min-w-0">
                 <h3 className="text-sm font-bold text-foreground truncate">{loc.title}</h3>
                 <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
-                  <MapPin size={10} /> {loc.guide?.city || "India"}
+                  <MapPin size={10} /> {loc.city || loc.guide?.city || "India"}
                 </p>
                 <span className="flex items-center gap-0.5 text-xs text-foreground mt-1">
                   <Star size={11} className="text-accent fill-accent" /> {loc.rating > 0 ? loc.rating.toFixed(1) : "New"}

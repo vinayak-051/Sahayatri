@@ -8,6 +8,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import GuideBottomNav from "@/components/GuideBottomNav";
 import { supabase } from "@/lib/supabaseClient";
+import { friendlyDbError } from "@/lib/dbErrors";
 import { useAuth } from "@/context/AuthContext";
 import { validateImageFile } from "@/lib/validateImage";
 import type { Location, Report } from "@/types/database";
@@ -53,6 +54,7 @@ const GuideLocations = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     title: "",
+    city: "",
     description: "",
     cost: "",
     days: "",
@@ -150,20 +152,11 @@ const GuideLocations = () => {
     setFiles(fileList);
   };
 
-  const handleDismissReport = async (reportId: string, locationId: string) => {
-    const { error } = await supabase.from("reports").update({ status: "dismissed" }).eq("id", reportId);
-    if (error) {
-      toast.error("Failed to dismiss report");
-      return;
-    }
-    setReportsByLocation((prev) => ({ ...prev, [locationId]: (prev[locationId] || []).filter((r) => r.id !== reportId) }));
-    toast.success("Report dismissed");
-  };
-
   const startEdit = (loc: Location) => {
     setEditingId(loc.id);
     setFormData({
       title: loc.title,
+      city: loc.city || "",
       description: loc.detailed_content || loc.short_description,
       cost: loc.price_per_person != null ? String(loc.price_per_person) : loc.pricing?.match(/\d+/)?.[0] || "",
       days: loc.timings?.match(/\d+/)?.[0] || "",
@@ -222,6 +215,7 @@ const GuideLocations = () => {
 
       const payload = {
         title: formData.title,
+        city: formData.city.trim() || user.city || null,
         short_description: formData.description.trim().slice(0, 140),
         detailed_content: formData.description.trim(),
         lat: parseFloat(formData.lat),
@@ -243,7 +237,7 @@ const GuideLocations = () => {
         : await supabase.from("locations").insert({ ...payload, guide_id: user.id, status: "active" });
 
       if (error) {
-        toast.error(error.message || "Failed to save location");
+        toast.error(friendlyDbError(error, "Failed to save location"));
         return;
       }
       toast.success(editingId ? "Location updated!" : "Location added successfully!");
@@ -295,6 +289,7 @@ const GuideLocations = () => {
             <h2 className="text-lg font-bold mb-4">{editingId ? "Edit Location" : "Add New Location"}</h2>
 
             <input required type="text" placeholder="Location" className="w-full glass rounded-xl px-4 py-3 text-sm" value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} />
+            <input type="text" placeholder={`City (default: ${user?.city || "your city"})`} aria-label="City" className="w-full glass rounded-xl px-4 py-3 text-sm" value={formData.city} onChange={(e) => setFormData({ ...formData, city: e.target.value })} />
 
             <textarea required placeholder="Description & timeline (e.g. Day 1: Arrival & sightseeing, Day 2: Trek...)" className="w-full glass rounded-xl px-4 py-3 text-sm h-24" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} />
 
@@ -439,6 +434,7 @@ const GuideLocations = () => {
 
                 {expandedReports === loc.id && reports.length > 0 && (
                   <div className="mt-2 ml-4 space-y-2">
+                    <p className="text-[10px] text-muted-foreground">Our moderation team reviews every report. Update the listing if something needs fixing.</p>
                     {reports.map((r) => (
                       <div key={r.id} className="bg-destructive/5 border border-destructive/10 rounded-xl p-3 flex items-start justify-between gap-2">
                         <div>
@@ -446,9 +442,6 @@ const GuideLocations = () => {
                           {r.description && <p className="text-[11px] text-muted-foreground mt-0.5">{r.description}</p>}
                           <p className="text-[9px] text-muted-foreground mt-1">{new Date(r.created_at).toLocaleDateString()}</p>
                         </div>
-                        <button onClick={() => handleDismissReport(r.id, loc.id)} className="p-1 text-muted-foreground hover:text-foreground">
-                          <X size={14} />
-                        </button>
                       </div>
                     ))}
                   </div>

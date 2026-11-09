@@ -185,7 +185,7 @@ const Explore = () => {
 
                     <div className="absolute bottom-4 left-4 right-4">
                       <p className="text-white/80 text-[10px] font-bold flex items-center gap-1 mb-1">
-                        <MapPin size={10} className="text-accent fill-accent/20" /> {loc.guide?.city || "India"}
+                        <MapPin size={10} className="text-accent fill-accent/20" /> {loc.city || loc.guide?.city || "India"}
                       </p>
                       <h3 className="text-white text-sm font-extrabold leading-tight line-clamp-2">{loc.title}</h3>
                       <p className="text-[9px] text-white/60 font-semibold truncate mt-1">

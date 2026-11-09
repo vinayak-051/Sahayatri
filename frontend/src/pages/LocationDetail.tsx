@@ -5,6 +5,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/context/AuthContext";
+import { friendlyDbError } from "@/lib/dbErrors";
 import type { Location, BuddyTrip, BookingStatus, LocationReview } from "@/types/database";
 
 const LocationDetail = () => {
@@ -39,18 +40,18 @@ const LocationDetail = () => {
     return () => { document.title = "Sahayatri - Your Journey, Our Guidance"; };
   }, [location]);
 
-  const fetchMyRequest = useCallback(async (guideId: string, destination: string) => {
+  const fetchMyRequest = useCallback(async (locationId: string, guideId: string, destination: string) => {
     if (!user) return;
-    const { data } = await supabase
-      .from("bookings")
-      .select("status")
-      .eq("traveler_id", user.id)
-      .eq("guide_id", guideId)
-      .eq("destination", destination)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    setMyRequestStatus((data?.status as BookingStatus) ?? null);
+    const myBookings = () => supabase.from("bookings").select("status").eq("traveler_id", user.id);
+    const latest = async (query: ReturnType<typeof myBookings>) =>
+      (await query.order("created_at", { ascending: false }).limit(1).maybeSingle()).data;
+
+    let booking = await latest(myBookings().eq("location_id", locationId));
+    if (!booking) {
+      // Bookings made before location_id existed only recorded the spot's title.
+      booking = await latest(myBookings().is("location_id", null).eq("guide_id", guideId).eq("destination", destination));
+    }
+    setMyRequestStatus((booking?.status as BookingStatus) ?? null);
   }, [user]);
 
   const fetchLocation = useCallback(async () => {
@@ -69,7 +70,7 @@ const LocationDetail = () => {
       return;
     }
     setLocation(data as Location);
-    fetchMyRequest((data as Location).guide_id, (data as Location).title);
+    fetchMyRequest((data as Location).id, (data as Location).guide_id, (data as Location).title);
 
     const title = (data as Location).title;
     const [{ data: otherLocs }, { data: buddyTrips }] = await Promise.all([
@@ -90,14 +91,11 @@ const LocationDetail = () => {
     setBuddies((buddyTrips ?? []) as BuddyTrip[]);
     setLoading(false);
 
-    // best-effort view counter
-    supabase
-      .from("locations")
-      .update({ views_count: ((data as Location).views_count || 0) + 1 })
-      .eq("id", id)
-      .then(({ error: viewCountError }) => {
-        if (viewCountError) console.error("Failed to update view count:", viewCountError.message);
-      });
+    // Best-effort view counter: an atomic database function, since travellers
+    // can't update a guide's spot directly.
+    supabase.rpc("increment_location_views", { p_location_id: id }).then(({ error: viewCountError }) => {
+      if (viewCountError) console.error("Failed to update view count:", viewCountError.message);
+    });
   }, [id, fetchMyRequest]);
 
   useEffect(() => {
@@ -133,7 +131,7 @@ const LocationDetail = () => {
     if (!window.confirm("Delete this review? This cannot be undone.")) return;
     const { error } = await supabase.from("location_reviews").delete().eq("id", reviewId);
     if (error) {
-      toast.error(error.message);
+      toast.error(friendlyDbError(error, "Couldn't remove the review."));
       return;
     }
     toast.success("Review removed");
@@ -148,11 +146,7 @@ const LocationDetail = () => {
         .from("location_reviews")
         .insert({ location_id: id, reviewer_id: user.id, rating: myRating, comment: myComment.trim() });
       if (error) {
-        if (error.code === "23505") {
-          toast.error("You've already reviewed this spot.");
-        } else {
-          toast.error(error.message);
-        }
+        toast.error(friendlyDbError(error, "Couldn't submit your review."));
         return;
       }
       setShowReviewForm(false);
@@ -170,7 +164,7 @@ const LocationDetail = () => {
     const channel = supabase
       .channel(`bookings-location-${user.id}-${location.id}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "bookings", filter: `traveler_id=eq.${user.id}` }, () => {
-        fetchMyRequest(location.guide_id, location.title);
+        fetchMyRequest(location.id, location.guide_id, location.title);
       })
       .subscribe();
     return () => {
@@ -260,17 +254,18 @@ const LocationDetail = () => {
     }
     setRequesting(true);
     try {
-      const totalAmount = (location.price_per_person ?? 0) * requestPeople;
+      // The database prices the trip from the spot (price × people) and sets the
+      // guide and destination; the client only says which spot, when and how many.
       const { error } = await supabase.from("bookings").insert({
         traveler_id: user.id,
         guide_id: location.guide_id,
+        location_id: location.id,
         destination: location.title,
         date: requestDate,
         people: requestPeople,
-        amount: totalAmount,
       });
       if (error) {
-        toast.error(error.message || "Failed to request trip");
+        toast.error(friendlyDbError(error, "Failed to request trip"));
         return;
       }
       setMyRequestStatus("pending");
@@ -291,7 +286,7 @@ const LocationDetail = () => {
         reason: reportReason.trim(),
       });
       if (error) {
-        toast.error(error.message);
+        toast.error(friendlyDbError(error, "Couldn't submit the report."));
         return;
       }
       toast.success("Report submitted for review. Thank you.");

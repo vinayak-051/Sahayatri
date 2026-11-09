@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import GuideBottomNav from "@/components/GuideBottomNav";
 import { supabase } from "@/lib/supabaseClient";
+import { friendlyDbError } from "@/lib/dbErrors";
 import { useAuth } from "@/context/AuthContext";
 import type { Booking } from "@/types/database";
 
@@ -57,11 +58,11 @@ const GuideBookings = () => {
       const status = action === "accept" ? "accepted" : "declined";
       const { error } = await supabase.from("bookings").update({ status }).eq("id", bookingId);
       if (error) {
-        if (error.message.toLowerCase().includes("not verified")) {
-          toast.error("Your account must be verified by admin before you can accept bookings.");
-        } else {
-          toast.error(error.message);
-        }
+        toast.error(
+          error.message.toLowerCase().includes("not verified")
+            ? "Your account must be verified by admin before you can accept bookings."
+            : friendlyDbError(error, "Couldn't update the booking."),
+        );
         return;
       }
       setBookings((prev) => prev.map((b) => (b.id === bookingId ? { ...b, status } : b)));

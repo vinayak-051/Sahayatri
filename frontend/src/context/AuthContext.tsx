@@ -33,21 +33,27 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+// Every profile column a client may read. Email is private (column-level grants),
+// so the signed-in user's email comes from the auth session instead.
+export const PROFILE_COLUMNS =
+  "id, name, role, profile_photo_url, city, additional_cities, languages, specialization, bio, rating, rate_per_day, is_available, is_verified, is_admin, is_banned, onboarded, created_at";
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
 
-  const fetchProfile = useCallback(async (userId: string): Promise<Profile | null> => {
-    const { data, error } = await supabase.from("profiles").select("*").eq("id", userId).single();
+  const fetchProfile = useCallback(async (authUser: { id: string; email?: string }): Promise<Profile | null> => {
+    const { data, error } = await supabase.from("profiles").select(PROFILE_COLUMNS).eq("id", authUser.id).single();
     if (error) {
       console.error("Failed to load profile:", error.message);
       setUser(null);
       return null;
     }
-    setUser(data as Profile);
-    return data as Profile;
+    const profile = { ...(data as Omit<Profile, "email">), email: authUser.email ?? "" } as Profile;
+    setUser(profile);
+    return profile;
   }, []);
 
   useEffect(() => {
@@ -70,7 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!mounted) return;
       setSession(data.session);
       if (data.session?.user) {
-        const profile = await fetchProfile(data.session.user.id);
+        const profile = await fetchProfile(data.session.user);
         if (profile?.is_admin && window.location.pathname !== "/admin" && window.location.pathname !== "/reset-password") {
           navigate("/admin");
         }
@@ -88,7 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       setSession(newSession);
       if (newSession?.user) {
-        const profile = await fetchProfile(newSession.user.id);
+        const profile = await fetchProfile(newSession.user);
         if (event === "SIGNED_IN" && profile?.is_admin) {
           navigate("/admin");
         }
@@ -162,7 +168,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const refreshProfile = async () => {
-    if (session?.user) await fetchProfile(session.user.id);
+    if (session?.user) await fetchProfile(session.user);
   };
 
   const userId = user?.id;

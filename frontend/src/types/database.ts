@@ -10,10 +10,19 @@ export type BookingStatus = "pending" | "accepted" | "confirmed" | "declined" | 
 export type FinalPaymentMode = "online" | "cash";
 export type BuddyRequestStatus = "pending" | "accepted" | "rejected";
 export type ReportStatus = "open" | "reviewed" | "dismissed";
-export type NotificationType = "booking_requested" | "booking_accepted" | "booking_declined" | "booking_advance_paid" | "booking_cancelled" | "new_message";
+export type NotificationType =
+  | "booking_requested"
+  | "booking_accepted"
+  | "booking_declined"
+  | "booking_advance_paid"
+  | "booking_cancelled"
+  | "new_message"
+  | "buddy_request_received"
+  | "buddy_request_accepted";
 
 export interface Profile {
   id: string;
+  /** Private: not readable from profiles. AuthContext fills it from the auth session for the signed-in user. */
   email: string;
   name: string;
   role: Role;
@@ -40,6 +49,7 @@ export interface Location {
   detailed_content: string;
   lat: number;
   lng: number;
+  city: string | null;
   category: string;
   tags: string[];
   best_visiting_time: string | null;
@@ -70,6 +80,7 @@ export interface Booking {
   people: number;
   amount: number;
   status: BookingStatus;
+  location_id: string | null;
   final_payment_mode: FinalPaymentMode | null;
   cancellation_fee: number;
   feedback: string;
@@ -157,7 +168,7 @@ export interface VerificationRequest {
   reviewed_by: string | null;
   reviewed_at: string | null;
   created_at: string;
-  guide?: Pick<Profile, "id" | "name" | "email" | "city" | "profile_photo_url">;
+  guide?: Pick<Profile, "id" | "name" | "city" | "profile_photo_url"> & { email?: string };
 }
 
 export interface GuideRatingStats {

@@ -21,7 +21,7 @@ const ForgotPassword = () => {
 
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
-  const [roleError, setRoleError] = useState<string | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
 
   const {
     register,
@@ -29,33 +29,22 @@ const ForgotPassword = () => {
     formState: { errors },
   } = useForm<FormValues>({ resolver: zodResolver(schema) });
 
-  const adminEmail = import.meta.env.VITE_ADMIN_EMAIL as string | undefined;
-
+  // Always send (Supabase silently ignores unknown emails) and always show the same
+  // message, so this form can't be used to find out who has an account.
   const onSubmit = async ({ email }: FormValues) => {
     setLoading(true);
-    setRoleError(null);
+    setSendError(null);
     try {
-      const isAdmin = adminEmail && email.toLowerCase() === adminEmail.toLowerCase();
-
-      if (!isAdmin) {
-        const { data: profiles } = await supabase
-          .from("profiles")
-          .select("role")
-          .eq("email", email)
-          .eq("role", role);
-
-        if (!profiles || profiles.length === 0) {
-          setRoleError(
-            `No ${role === "guide" ? "guide" : "traveller"} account found for this email.`
-          );
-          return;
-        }
-      }
-
-      await supabase.auth.resetPasswordForEmail(email, {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/reset-password`,
       });
+      if (error && /rate limit|too many/i.test(error.message)) {
+        setSendError("Too many reset requests. Please wait a few minutes and try again.");
+        return;
+      }
       setSent(true);
+    } catch {
+      setSendError("Couldn't reach the server. Check your connection and try again.");
     } finally {
       setLoading(false);
     }
@@ -90,7 +79,7 @@ const ForgotPassword = () => {
           <div className="glass rounded-3xl p-6 space-y-4">
             {sent ? (
               <p className="text-sm text-center text-foreground">
-                A reset link has been sent to your email. Check your inbox.
+                If an account exists for that email, a reset link is on its way. Check your inbox and spam folder.
               </p>
             ) : (
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -105,7 +94,7 @@ const ForgotPassword = () => {
                     />
                   </div>
                   {errors.email && <p className="text-xs text-destructive mt-1 ml-1">{errors.email.message}</p>}
-                  {roleError && <p className="text-xs text-destructive mt-1 ml-1">{roleError}</p>}
+                  {sendError && <p className="text-xs text-destructive mt-1 ml-1">{sendError}</p>}
                 </div>
 
                 <button

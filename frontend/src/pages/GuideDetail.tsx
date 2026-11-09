@@ -4,6 +4,7 @@ import { ArrowLeft, Star, Globe, MessageCircle, Shield, MapPin, Send, X } from "
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
+import { friendlyDbError } from "@/lib/dbErrors";
 import { useAuth } from "@/context/AuthContext";
 import type { Profile, Review } from "@/types/database";
 
@@ -72,11 +73,11 @@ const GuideDetail = () => {
         .from("reviews")
         .insert({ guide_id: id, reviewer_id: user.id, rating: myRating, comment: myComment.trim() });
       if (error) {
-        if (error.code === "23505") {
-          toast.error("You've already reviewed this guide.");
-        } else {
-          toast.error(error.message);
-        }
+        toast.error(
+          error.code === "42501" && /row-level security/i.test(error.message)
+            ? "You can review a guide after completing a trip with them."
+            : friendlyDbError(error, "Couldn't submit your review."),
+        );
         return;
       }
       setShowReviewForm(false);
@@ -120,10 +121,9 @@ const GuideDetail = () => {
         destination: guide.city || "TBD",
         date: bookingDate,
         people: bookingPeople,
-        amount: (guide.rate_per_day ?? 0) * bookingPeople,
       });
       if (error) {
-        toast.error(error.message || "Failed to book guide");
+        toast.error(friendlyDbError(error, "Failed to book guide"));
         return;
       }
       toast.success(`Booking request sent to ${guide.name}! 🎉`);
