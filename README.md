@@ -1,145 +1,136 @@
 # Sahayatri Journeys
 
-A travel app connecting tourists with local guides across India — browse guide-authored
-spots, book a guide, chat in real time, leave reviews, and plan trips with other travelers.
+A travel app connecting tourists with local guides across India. Travellers browse
+guide-authored spots, book and pay a verified guide, chat in real time, leave reviews
+and find travel buddies. Guides publish spots, manage bookings and get ID-verified
+by an admin.
 
-**Architecture**: React + Vite frontend, talking directly to [Supabase](https://supabase.com)
-for authentication, the Postgres database (with Row Level Security), file storage, and
-realtime messaging. There is no separate backend server — `backend/` only holds the SQL
-schema and an admin-only seed script.
+**Live demo:** https://sahayatri-nu.vercel.app
+
+## Architecture
 
 ```
-frontend/   React + Vite app (the only thing you run with `npm run dev`)
-backend/    SQL migrations + a Node seed script (uses the Supabase service-role key)
+frontend/                 React 18 + TypeScript + Vite single-page app (deployed on Vercel)
+backend/
+  supabase/migrations/    Versioned PostgreSQL schema: tables, row-level security, triggers
+  supabase/functions/     Deno edge functions: payments-api, razorpay-webhook, send-push
+  tests/db/               Database tests (migrations + security rules) on in-memory PostgreSQL
+  seed.mjs                Demo data (uses the service-role key; never ship it to the browser)
+docs/                     AUDIT.md (current findings) and ROADMAP.md (plan and decisions)
 ```
+
+The browser talks to [Supabase](https://supabase.com) directly: Auth, PostgREST
+(the database's REST API), Storage and Realtime. **Postgres is the security
+boundary.** Row-level security decides which rows a user can touch. Column-level
+grants decide which fields. Triggers enforce rules that depend on old and new
+values (booking status transitions, server-side pricing). Anything that needs a
+secret or moves money runs in an edge function. Razorpay's signed webhook, not the
+browser, confirms payments.
 
 ## Prerequisites
 
-- Node.js 20+
-- A free [Supabase](https://supabase.com) account and project
+- Node.js 22+
+- A Supabase project (the free tier is fine)
+- Optional: the [Supabase CLI](https://supabase.com/docs/guides/cli) for applying migrations and deploying functions
 
-## 1. Create a Supabase project
+## 1. Create the database
 
-1. Go to [supabase.com](https://supabase.com) → New Project. Pick any region/password.
-2. Open **SQL Editor** in the project dashboard, paste the contents of
-   [`backend/backend.sql`](backend/backend.sql) (the consolidated schema), and run it.
-   This creates every table, Row Level Security policy, the `profiles` auto-creation
-   trigger, the Storage buckets, and enables Realtime. Then run the follow-up
-   migrations in [`backend/migrations/`](backend/migrations) **in numeric order**
-   (`0014` blocks self-bookings, `0015` adds guide ID verification, `0016` adds
-   moderation/bans, `0017` adds anti-spam rate limits). Each file's header comment
-   says what it does and any manual step required first.
-3. New guides start with `is_verified = false` and show no "Verified" badge. Guides
-   upload a government ID from their Profile page; admins review and approve/reject
-   it in **Admin Dashboard → Verifications** (requires migration `0015`).
-4. (Optional, for "Continue with Google") In **Authentication → Providers**, enable
-   Google and paste your own OAuth client ID/secret from
-   [Google Cloud Console](https://console.cloud.google.com/apis/credentials). Add
-   `http://localhost:8000` to your app's authorized redirect origins as needed.
+Apply every file in [`backend/supabase/migrations/`](backend/supabase/migrations) **in filename order**. Either:
+
+- **CLI (recommended):**
+  ```bash
+  cd backend
+  supabase login
+  supabase link --project-ref <your-project-ref>
+  supabase db push
+  ```
+- **Dashboard:** paste each file into the SQL Editor and run it, oldest first.
+
+To make yourself an admin, run this in the SQL Editor:
+
+```sql
+insert into public.admin_lookup (user_id) select id from public.profiles where email = 'you@example.com';
+update public.profiles set is_admin = true where email = 'you@example.com';
+```
+
+Optional, for "Continue with Google": enable Google under **Authentication → Providers**.
+
+Required for email links (sign-up confirmation, password reset, Google redirects): under
+**Authentication → URL Configuration**, set **Site URL** to your app's URL and add
+`<your app URL>/**` to the **Redirect URLs**.
 
 ## 2. Configure environment variables
 
-**Frontend** — copy the example and fill in your project's public values (Project
-Settings → API in the Supabase dashboard):
+**Frontend:** copy the example, then fill it in from **Project Settings → API**. These values are public.
 
 ```bash
 cp frontend/.env.example frontend/.env.local
 ```
 
-```
-VITE_SUPABASE_URL=https://your-project-ref.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-public-key
-```
-
-**Backend (seed script only)** — this needs the **service role** key, which bypasses
-Row Level Security. Never commit it, never put it in a `VITE_`-prefixed variable, and
-never ship it to the frontend.
+**Backend (seed script only):** this needs the **service-role** key, which bypasses
+row-level security. Never commit it, never put it in a `VITE_` variable, and never
+ship it to the browser.
 
 ```bash
 cp backend/.env.example backend/.env
 ```
 
-```
-SUPABASE_URL=https://your-project-ref.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-secret-key
-```
+**Edge function secrets** (`supabase secrets set …`): `RAZORPAY_KEY_ID`,
+`RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`, `VAPID_SUBJECT`,
+`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`. Deploy the functions with
+`supabase functions deploy` from `backend/`.
 
-## 3. Install and seed
+The `send-push` Database Webhook (on insert into `notifications`) must send the header
+`Authorization: Bearer <service role key>`.
 
-From the repo root:
-
-```bash
-npm install --workspace=frontend
-npm install --workspace=backend
-npm run seed
-```
-
-The seed script creates 5 travelers, 8 guides (across Jaipur, Kochi, Leh, Varanasi,
-Udaipur, Madurai, Hyderabad, and Gangtok), 15 real location listings, a mix of bookings,
-buddy trips, a message thread, and reviews — then prints every demo login email plus the
-shared password to your terminal. Demo password for every seeded account:
-
-```
-Sahayatri@123
-```
-
-## 4. Run the app
+## 3. Install, seed and run
 
 ```bash
-npm run dev
+cd backend && npm install && npm run seed     # demo users, spots, bookings, chats, reviews
+cd ../frontend && npm install && npm run dev  # http://localhost:8000
 ```
 
-Open **http://localhost:8000** and log in with any seeded email above (e.g.
-`vinayak.traveler@sahayatri.dev` as a traveler, or `guide.jaipur@sahayatri.dev` as a
-guide) and the password above.
+Every seeded account uses the password `Sahayatri@123`. For example:
+- `vinayak.traveler@sahayatri.dev`: sign in under *Explore as Traveler*
+- `guide.jaipur@sahayatri.dev`: sign in under *Earn as Guide*
 
-## Staging vs. production
-
-There is currently only **one** Supabase project, used for both local development and
-whatever you consider "production." Before any real users sign up, create a **second
-Supabase project** for production and re-run the migrations there (`backend.sql` +
-`backend/migrations/` in order) —
-keep development/demo data in the original project entirely separate from real user
-data. Point `frontend/.env.local` (or your deploy host's env vars) and `backend/.env` at
-whichever project you mean to target; the two projects don't need to share anything.
+The seed script prints every account. Re-running it reuses existing users and spots, but adds duplicate bookings, trips and messages.
 
 ## Testing
 
 ```bash
-npm run test --workspace=frontend     # vitest unit tests (mocked Supabase client)
-npm run lint --workspace=frontend     # eslint
-npx playwright test                   # e2e — requires a seeded, running app (see below)
+cd frontend
+npm run lint
+npm run typecheck
+npm run test          # Vitest + Testing Library (mocked Supabase)
+npx playwright test   # end-to-end; needs a seeded project and the dev server
+
+cd ../backend
+npm test              # applies all migrations to in-memory PostgreSQL and tests every security rule
 ```
 
-Playwright's `happy-path.spec.ts` logs in with the seeded demo accounts and exercises
-the real Supabase-backed Explore/booking flow, so run `npm run seed` against your
-project and `npm run dev` (or let Playwright's `webServer` start it for you) before
-running e2e specs.
+The database tests use [PGlite](https://pglite.dev) (real PostgreSQL 17 compiled to
+WebAssembly), so they need no Docker. Each test switches to the same role PostgREST
+uses (`anon`, `authenticated` or `service_role`) and checks what that role can and
+cannot do. CI runs all of the above on every push and pull request to `main`.
+
+## Deployment
+
+- **Frontend:** Vercel project rooted at `frontend/` (`vercel.json` rewrites every route to the SPA). Set the `VITE_*` variables in Vercel.
+- **Database:** `supabase db push` from `backend/` applies only the migrations that aren't applied yet.
+- **Edge functions:** `supabase functions deploy` from `backend/`.
+
+Apply database migrations **before** deploying a frontend that depends on them.
 
 ## Troubleshooting
 
-- **"Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY"** — you haven't created
-  `frontend/.env.local`. Restart `npm run dev` after creating it; Vite only reads env
-  files at startup.
-- **Seed script throws "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY"** — same
-  idea, but for `backend/.env`, and it needs the *service role* key, not the anon key.
-- **Login works but Explore/Map show nothing** — you haven't run the SQL migration or
-  the seed script against this project yet.
-- **403 / "row-level security policy" errors** — you're likely using the anon key
-  where a service-role key is expected (or vice versa), or a policy in
-  `backend.sql` wasn't applied. Re-run the migration SQL in the Supabase SQL editor;
-  it's safe to re-run `create policy` statements only if the table was freshly created,
-  so on a non-fresh project drop conflicting policies first.
-- **Migration only partially applied / "table not found in schema cache" / seed script
-  fails on a table that should exist** — the SQL editor run stopped partway through (or
-  you're re-running it on a project that already has some of these objects). On a
-  non-fresh project, drop the conflicting tables/policies first (or start from a fresh
-  Supabase project) and re-run `backend.sql` from the top. If the seed script then
-  fails with "a user with this email address has already been registered", that's
-  expected — the seed script handles it automatically (it backfills the profile row
-  for the already-existing auth user) and you can just re-run `npm run seed`.
-- **Google sign-in redirects to an error page** — the Google provider isn't enabled in
-  Supabase Authentication → Providers, or the redirect URL isn't allow-listed there.
-- **Realtime messages don't appear live** — confirm `alter publication supabase_realtime
-  add table public.messages;` ran (it's in the migration) and that Realtime is enabled
-  for the project (Database → Replication).
+- **"Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY":** create `frontend/.env.local`, then restart `npm run dev`.
+- **"permission denied for table profiles":** a query selected `*` or `email` from `profiles`. Emails are private: select explicit columns (see `PROFILE_COLUMNS` in `AuthContext.tsx`). Admins read emails from `admin_profiles`.
+- **"Booking status cannot change from … to …":** the database only allows real transitions:
+  - the guide accepts or declines a pending request;
+  - the traveller cancels a pending or accepted booking, or completes the trip on or after its date;
+  - only the payment system confirms or refunds.
+- **Explore or Map shows nothing:** the migrations or the seed haven't been run against this project. Spots also only appear once their guide is verified.
+- **Password reset or Google sign-in redirects to localhost:** set the Site URL and Redirect URLs (step 1).
+- **Realtime updates don't arrive:** check **Database → Replication**. `messages`, `bookings` and `notifications` must be in the `supabase_realtime` publication (the baseline migration adds them).
+- **The project is unreachable:** free-tier Supabase projects pause after about 7 days without traffic. Restore the project from the dashboard.
