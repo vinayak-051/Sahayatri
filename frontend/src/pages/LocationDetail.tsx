@@ -127,17 +127,6 @@ const LocationDetail = () => {
     fetchReviews();
   }, [fetchReviews]);
 
-  const deleteReview = async (reviewId: string) => {
-    if (!window.confirm("Delete this review? This cannot be undone.")) return;
-    const { error } = await supabase.from("location_reviews").delete().eq("id", reviewId);
-    if (error) {
-      toast.error(friendlyDbError(error, "Couldn't remove the review."));
-      return;
-    }
-    toast.success("Review removed");
-    fetchReviews();
-  };
-
   const submitReview = async () => {
     if (!myRating || !myComment.trim() || !id || !user) return;
     setSubmittingReview(true);
@@ -538,11 +527,6 @@ const LocationDetail = () => {
                       <span className="text-[8px] text-muted-foreground whitespace-nowrap">
                         {new Date(r.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
                       </span>
-                      {user?.is_admin && (
-                        <button onClick={() => deleteReview(r.id)} className="text-[9px] font-bold text-destructive">
-                          Delete
-                        </button>
-                      )}
                     </div>
                   </div>
                   <p className="text-xs text-muted-foreground leading-relaxed pl-10">{r.comment}</p>

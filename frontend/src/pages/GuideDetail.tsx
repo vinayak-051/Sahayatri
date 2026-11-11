@@ -11,10 +11,12 @@ import type { Profile, Review } from "@/types/database";
 const GuideDetail = () => {
   const navigate = useNavigate();
   const { id } = useParams();
-  const { user, isGuide } = useAuth();
+  const { user, isGuide, isTraveler } = useAuth();
   const [guide, setGuide] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(true);
+  const [completedTrip, setCompletedTrip] = useState<"checking" | "yes" | "no" | "error">("checking");
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [myRating, setMyRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
@@ -53,17 +55,51 @@ const GuideDetail = () => {
 
   const fetchReviews = useCallback(async () => {
     if (!id) return;
+    setReviewsLoading(true);
     const { data, error } = await supabase
       .from("reviews")
       .select("*, reviewer:profiles!reviews_reviewer_id_fkey(id, name, role, profile_photo_url)")
       .eq("guide_id", id)
       .order("created_at", { ascending: false });
     if (!error) setReviews((data ?? []) as Review[]);
+    setReviewsLoading(false);
   }, [id]);
 
   useEffect(() => {
     fetchReviews();
   }, [fetchReviews]);
+
+  // The database lets a traveller review a guide only after a completed trip with them.
+  const userId = user?.id;
+  useEffect(() => {
+    if (!id || !userId || !isTraveler) return;
+    let cancelled = false;
+    setCompletedTrip("checking");
+    supabase
+      .from("bookings")
+      .select("id", { count: "exact", head: true })
+      .eq("traveler_id", userId)
+      .eq("guide_id", id)
+      .eq("status", "completed")
+      .then(({ count, error }) => {
+        if (!cancelled) setCompletedTrip(error ? "error" : (count ?? 0) > 0 ? "yes" : "no");
+      });
+    return () => { cancelled = true; };
+  }, [id, userId, isTraveler]);
+
+  const hasReviewed = !!userId && reviews.some((r) => r.reviewer_id === userId);
+  const reviewEligibility =
+    !userId || !isTraveler ? "hidden"
+    : hasReviewed ? "already-reviewed"
+    : reviewsLoading || completedTrip === "checking" ? "checking"
+    : completedTrip === "error" ? "unknown"
+    : completedTrip === "yes" ? "eligible"
+    : "needs-trip";
+  const reviewNote =
+    reviewEligibility === "already-reviewed" ? "You've already reviewed this guide."
+    : reviewEligibility === "needs-trip" ? "You can review a guide after completing a trip with them."
+    : reviewEligibility === "unknown" ? "Couldn't check whether you can review this guide. Please try again later."
+    : null;
 
   const submitReview = async () => {
     if (!myRating || !myComment.trim() || !id || !user) return;
@@ -224,7 +260,7 @@ const GuideDetail = () => {
               <h3 className="text-sm font-semibold text-foreground">Reviews</h3>
               <p className="text-[10px] text-muted-foreground mt-0.5">{reviews.length} from Sahayatri verified users</p>
             </div>
-            {user && !isGuide && (
+            {reviewEligibility === "eligible" && (
               <button
                 onClick={() => setShowReviewForm((v) => !v)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl gradient-primary text-white text-[10px] font-bold active:scale-95 transition-transform"
@@ -252,8 +288,12 @@ const GuideDetail = () => {
             </div>
           )}
 
+          {reviewNote && (
+            <p className="text-[10px] text-muted-foreground bg-secondary/60 rounded-xl px-3 py-2 mb-4">{reviewNote}</p>
+          )}
+
           <AnimatePresence>
-            {showReviewForm && (
+            {showReviewForm && reviewEligibility === "eligible" && (
               <motion.div
                 initial={{ height: 0, opacity: 0 }}
                 animate={{ height: "auto", opacity: 1 }}
@@ -306,7 +346,7 @@ const GuideDetail = () => {
           {reviews.length === 0 ? (
             <div className="text-center py-8 opacity-40">
               <div className="text-3xl mb-2">⭐</div>
-              <p className="text-xs">No reviews yet. Be the first to review!</p>
+              <p className="text-xs">{reviewEligibility === "eligible" ? "No reviews yet. Be the first to review!" : "No reviews yet."}</p>
             </div>
           ) : (
             <div className="space-y-4">

@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback, type ReactNode } from "react";
+import { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import {
   ArrowLeft, CheckCircle, XCircle, User, MapPin, Star, Search, RefreshCw,
   Users, TrendingUp, Calendar, Package, ChevronDown, ChevronUp, LogOut,
-  FileText, Flag, Ban, Archive, IndianRupee,
+  FileText, Flag, Ban, Archive, IndianRupee, CreditCard, Trash2, Wallet,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -13,12 +13,17 @@ import {
 } from "recharts";
 import { supabase } from "@/lib/supabaseClient";
 import { friendlyDbError } from "@/lib/dbErrors";
+import { parseOverviewStats, type AdminOverviewStats } from "@/lib/adminStats";
+import {
+  fetchAdminReviews, ADMIN_REVIEWS_LIMIT, LOW_RATING_MAX,
+  type AdminReview, type ReviewKindFilter,
+} from "@/lib/adminReviews";
 import { useAuth } from "@/context/AuthContext";
 import type { Profile, VerificationRequest } from "@/types/database";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type AdminTab = "overview" | "guides" | "verifications" | "reports" | "bookings" | "buddy" | "analytics" | "payouts";
+type AdminTab = "overview" | "guides" | "verifications" | "reports" | "reviews" | "bookings" | "buddy" | "analytics" | "payouts";
 type GuideFilter = "unverified" | "verified" | "all";
 
 interface ReportRow {
@@ -78,23 +83,12 @@ interface TravelerRow {
   created_at: string;
 }
 
-interface OverviewStats {
-  travelers: number;
-  guides: number;
-  verifiedGuides: number;
-  totalBookings: number;
-  pendingBookings: number;
-  acceptedBookings: number;
-  completedBookings: number;
-  totalRevenue: number;
-  buddyTrips: number;
-}
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const STATUS_COLORS: Record<string, string> = {
   pending:   "bg-amber-500/10 text-amber-600",
   accepted:  "bg-blue-500/10 text-blue-600",
+  confirmed: "bg-indigo-500/10 text-indigo-600",
   completed: "bg-green-500/10 text-green-600",
   declined:  "bg-red-500/10 text-red-500",
   cancelled: "bg-gray-500/10 text-gray-500",
@@ -143,7 +137,7 @@ function buildMonthlyData(rows: AnalyticsRow[]) {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function StatCard({ label, value, color, icon, onClick }: { label: string; value: number; color: string; icon: ReactNode; onClick?: () => void }) {
+function StatCard({ label, value, color, icon, onClick, currency }: { label: string; value: number; color: string; icon: ReactNode; onClick?: () => void; currency?: boolean }) {
   return (
     <button
       onClick={onClick}
@@ -151,10 +145,21 @@ function StatCard({ label, value, color, icon, onClick }: { label: string; value
     >
       <div className={`flex items-center gap-1.5 mb-0.5 ${color}`}>
         {icon}
-        <p className="text-xl font-bold">{value.toLocaleString("en-IN")}</p>
+        <p className="text-xl font-bold">{currency ? fmtCurrency(value) : value.toLocaleString("en-IN")}</p>
       </div>
       <p className="text-[10px] text-muted-foreground">{label}</p>
     </button>
+  );
+}
+
+function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="text-center py-12 space-y-3">
+      <p className="text-sm text-destructive">{message}</p>
+      <button onClick={onRetry} className="px-4 py-1.5 rounded-full glass text-xs font-medium text-foreground">
+        Try again
+      </button>
+    </div>
   );
 }
 
@@ -209,6 +214,15 @@ const AdminDashboard = () => {
   const [reports, setReports] = useState<ReportRow[]>([]);
   const [reportFilter, setReportFilter] = useState<"open" | "all">("open");
   const [actioningReportId, setActioningReportId] = useState<string | null>(null);
+
+  // Reviews
+  const [reviewRows, setReviewRows] = useState<AdminReview[]>([]);
+  const [reviewKind, setReviewKind] = useState<ReviewKindFilter>("all");
+  const [lowRatingsOnly, setLowRatingsOnly] = useState(false);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [reviewsError, setReviewsError] = useState<string | null>(null);
+  const [deletingReviewId, setDeletingReviewId] = useState<string | null>(null);
+  const reviewsRequest = useRef(0);
 
   // Bookings
   const [bookings, setBookings] = useState<BookingRow[]>([]);
@@ -269,7 +283,8 @@ const AdminDashboard = () => {
   };
 
   // Overview & Analytics
-  const [stats, setStats] = useState<OverviewStats | null>(null);
+  const [stats, setStats] = useState<AdminOverviewStats | null>(null);
+  const [statsError, setStatsError] = useState<string | null>(null);
   const [analyticsData, setAnalyticsData] = useState<{
     daily: ReturnType<typeof buildDailyData>;
     monthly: ReturnType<typeof buildMonthlyData>;
@@ -295,33 +310,49 @@ const AdminDashboard = () => {
     setTravelersLoading(false);
   }, []);
 
+  // Totals are computed in the database (admin_overview_stats), not by downloading tables.
   const fetchStats = useCallback(async () => {
     setLoading(true);
-    const [travelersRes, guidesRes, bookingsRes, buddyRes] = await Promise.all([
-      supabase.from("profiles").select("id", { count: "exact", head: true }).eq("role", "traveler").neq("is_admin", true),
-      supabase.from("profiles").select("id, is_verified").eq("role", "guide").neq("is_admin", true),
-      supabase.from("bookings").select("id, status, amount"),
-      supabase.from("buddy_trips").select("*", { count: "exact", head: true }),
-    ]);
-
-    const allGuides = guidesRes.data ?? [];
-    const allBookings = (bookingsRes.data ?? []) as { id: string; status: string; amount: number }[];
-
-    setStats({
-      travelers: travelersRes.count ?? 0,
-      guides: allGuides.length,
-      verifiedGuides: allGuides.filter((g) => g.is_verified).length,
-      totalBookings: allBookings.length,
-      pendingBookings: allBookings.filter((b) => b.status === "pending").length,
-      acceptedBookings: allBookings.filter((b) => b.status === "accepted").length,
-      completedBookings: allBookings.filter((b) => b.status === "completed").length,
-      totalRevenue: allBookings
-        .filter((b) => b.status === "completed")
-        .reduce((s, b) => s + (b.amount ?? 0), 0),
-      buddyTrips: buddyRes.count ?? 0,
-    });
+    setStatsError(null);
+    const { data, error } = await supabase.rpc("admin_overview_stats");
+    if (error) setStatsError(friendlyDbError(error, "Couldn't load the overview."));
+    else setStats(parseOverviewStats(data));
     setLoading(false);
   }, []);
+
+  const fetchReviews = useCallback(async () => {
+    const request = ++reviewsRequest.current;
+    setReviewsLoading(true);
+    setReviewsError(null);
+    const { reviews, error } = await fetchAdminReviews({ kind: reviewKind, lowRatingsOnly });
+    if (request !== reviewsRequest.current) return; // a newer filter's request superseded this one
+    if (error) setReviewsError(friendlyDbError(error, "Couldn't load reviews."));
+    else setReviewRows(reviews);
+    setReviewsLoading(false);
+  }, [reviewKind, lowRatingsOnly]);
+
+  const deleteReview = async (review: AdminReview) => {
+    const reason = window.prompt(
+      `Why are you removing this review by ${review.authorName ?? "this user"}? (Saved in the admin log.)`,
+    );
+    if (reason === null) return; // cancelled
+    if (!reason.trim()) {
+      toast.error("Add a reason to remove the review.");
+      return;
+    }
+    setDeletingReviewId(review.id);
+    const { error } = await supabase.rpc("admin_delete_review", {
+      p_kind: review.kind,
+      p_review_id: review.id,
+      p_reason: reason.trim(),
+    });
+    if (error) toast.error(friendlyDbError(error, "Couldn't remove the review."));
+    else {
+      toast.success("Review removed");
+      fetchReviews();
+    }
+    setDeletingReviewId(null);
+  };
 
   const fetchGuides = useCallback(async () => {
     setLoading(true);
@@ -522,12 +553,18 @@ const AdminDashboard = () => {
     else if (activeTab === "guides") fetchGuides();
     else if (activeTab === "verifications") fetchVerifications();
     else if (activeTab === "reports") fetchReports();
+    else if (activeTab === "reviews") fetchReviews();
     else if (activeTab === "bookings") fetchBookings();
     else if (activeTab === "buddy") fetchBuddyTrips();
     else if (activeTab === "analytics") fetchAnalytics();
     else if (activeTab === "payouts") fetchPayouts();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, user?.is_admin]);
+
+  useEffect(() => {
+    if (activeTab === "reviews" && user?.is_admin) fetchReviews();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reviewKind, lowRatingsOnly]);
 
   useEffect(() => {
     if (activeTab === "verifications" && user?.is_admin) fetchVerifications();
@@ -570,8 +607,10 @@ const AdminDashboard = () => {
     else if (activeTab === "guides") fetchGuides();
     else if (activeTab === "verifications") fetchVerifications();
     else if (activeTab === "reports") fetchReports();
+    else if (activeTab === "reviews") fetchReviews();
     else if (activeTab === "bookings") fetchBookings();
     else if (activeTab === "buddy") fetchBuddyTrips();
+    else if (activeTab === "payouts") fetchPayouts();
     else fetchAnalytics();
   };
 
@@ -590,6 +629,7 @@ const AdminDashboard = () => {
     { key: "guides",        label: "Guides" },
     { key: "verifications", label: "Verifications" },
     { key: "reports",       label: "Reports" },
+    { key: "reviews",       label: "Reviews" },
     { key: "bookings",      label: "Bookings" },
     { key: "buddy",         label: "Buddy Trips" },
     { key: "analytics",     label: "Analytics" },
@@ -605,8 +645,8 @@ const AdminDashboard = () => {
         </button>
         <h1 className="text-lg font-bold text-foreground">Admin Dashboard</h1>
         <div className="ml-auto flex items-center gap-2">
-          <button onClick={refresh} className="p-1">
-            <RefreshCw size={18} className={`text-muted-foreground ${loading ? "animate-spin" : ""}`} />
+          <button onClick={refresh} className="p-1" aria-label="Refresh">
+            <RefreshCw size={18} className={`text-muted-foreground ${loading || reviewsLoading ? "animate-spin" : ""}`} />
           </button>
           <button
             onClick={async () => { await logout(); navigate("/auth"); }}
@@ -679,7 +719,9 @@ const AdminDashboard = () => {
 
           {/* ── Stats Grid ── */}
           {overviewDetail === null && (
-            loading || !stats ? <Spinner /> : (
+            loading ? <Spinner /> : statsError || !stats ? (
+              <ErrorState message={statsError ?? "Couldn't load the overview."} onRetry={fetchStats} />
+            ) : (
               <>
                 <Section label="Users">
                   <div className="grid grid-cols-2 gap-3">
@@ -704,35 +746,76 @@ const AdminDashboard = () => {
 
                 <Section label="Bookings">
                   <div className="grid grid-cols-2 gap-3">
+                    <div className="col-span-2">
+                      <StatCard
+                        label="Total Bookings" value={stats.bookings.total} color="text-foreground" icon={<Calendar size={15} />}
+                        onClick={() => { setActiveTab("bookings"); setBookingFilter("all"); }}
+                      />
+                    </div>
                     <StatCard
-                      label="Total Bookings" value={stats.totalBookings} color="text-foreground" icon={<Calendar size={15} />}
-                      onClick={() => { setActiveTab("bookings"); setBookingFilter("all"); }}
-                    />
-                    <StatCard
-                      label="Pending" value={stats.pendingBookings} color="text-amber-500" icon={<Package size={15} />}
+                      label="Pending" value={stats.bookings.pending} color="text-amber-500" icon={<Package size={15} />}
                       onClick={() => { setActiveTab("bookings"); setBookingFilter("pending"); }}
                     />
                     <StatCard
-                      label="Active Tours" value={stats.acceptedBookings} color="text-blue-500" icon={<TrendingUp size={15} />}
+                      label="Accepted (awaiting advance)" value={stats.bookings.accepted} color="text-blue-500" icon={<TrendingUp size={15} />}
                       onClick={() => { setActiveTab("bookings"); setBookingFilter("accepted"); }}
                     />
                     <StatCard
-                      label="Completed" value={stats.completedBookings} color="text-green-500" icon={<CheckCircle size={15} />}
+                      label="Confirmed (advance paid)" value={stats.bookings.confirmed} color="text-indigo-500" icon={<CreditCard size={15} />}
+                      onClick={() => { setActiveTab("bookings"); setBookingFilter("confirmed"); }}
+                    />
+                    <StatCard
+                      label="Completed" value={stats.bookings.completed} color="text-green-500" icon={<CheckCircle size={15} />}
                       onClick={() => { setActiveTab("bookings"); setBookingFilter("completed"); }}
+                    />
+                    <StatCard
+                      label="Declined" value={stats.bookings.declined} color="text-red-500" icon={<XCircle size={15} />}
+                      onClick={() => { setActiveTab("bookings"); setBookingFilter("declined"); }}
+                    />
+                    <StatCard
+                      label="Cancelled" value={stats.bookings.cancelled} color="text-muted-foreground" icon={<Ban size={15} />}
+                      onClick={() => { setActiveTab("bookings"); setBookingFilter("cancelled"); }}
                     />
                   </div>
                 </Section>
 
-                <Section label="Revenue & Trips">
+                <Section label="Money">
                   <div className="glass rounded-2xl p-4 shadow-card mb-3">
-                    <p className="text-xs text-muted-foreground mb-0.5">Total Revenue (completed)</p>
-                    <p className="text-2xl font-bold text-green-500">{fmtCurrency(stats.totalRevenue)}</p>
+                    <p className="text-xs text-muted-foreground mb-0.5">Platform revenue</p>
+                    <p className="text-2xl font-bold text-green-500">{fmtCurrency(stats.platformRevenue)}</p>
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      {fmtCurrency(stats.commissionRevenue)} commission + {fmtCurrency(stats.cancellationFees)} cancellation fees
+                    </p>
                   </div>
-                  <div className="grid grid-cols-1 gap-3">
+                  <div className="grid grid-cols-2 gap-3">
                     <StatCard
-                      label="Buddy Trips Posted" value={stats.buddyTrips} color="text-primary" icon={<Users size={15} />}
-                      onClick={() => setActiveTab("buddy")}
+                      label="Gross booking value (completed trips)" value={stats.grossBookingValue} currency
+                      color="text-foreground" icon={<IndianRupee size={15} />}
                     />
+                    <StatCard
+                      label="Owed to guides (unpaid balances)" value={stats.outstandingGuideBalances} currency
+                      color="text-amber-500" icon={<Wallet size={15} />}
+                      onClick={() => setActiveTab("payouts")}
+                    />
+                  </div>
+                </Section>
+
+                <Section label="Moderation & Trips">
+                  <div className="grid grid-cols-2 gap-3">
+                    <StatCard
+                      label="Open Reports" value={stats.openReports} color="text-destructive" icon={<Flag size={15} />}
+                      onClick={() => { setActiveTab("reports"); setReportFilter("open"); }}
+                    />
+                    <StatCard
+                      label="Pending Verifications" value={stats.pendingVerifications} color="text-amber-500" icon={<FileText size={15} />}
+                      onClick={() => { setActiveTab("verifications"); setVerifFilter("pending"); }}
+                    />
+                    <div className="col-span-2">
+                      <StatCard
+                        label="Buddy Trips Posted" value={stats.buddyTrips} color="text-primary" icon={<Users size={15} />}
+                        onClick={() => setActiveTab("buddy")}
+                      />
+                    </div>
                   </div>
                 </Section>
               </>
@@ -1007,11 +1090,99 @@ const AdminDashboard = () => {
         </div>
       )}
 
+      {/* ── REVIEWS ──────────────────────────────────────────────────────────── */}
+      {activeTab === "reviews" && (
+        <div className="px-6 space-y-3">
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {(["all", "guide", "spot"] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => setReviewKind(f)}
+                aria-pressed={reviewKind === f}
+                className={`px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+                  reviewKind === f ? "gradient-primary text-primary-foreground shadow-glow" : "glass text-muted-foreground"
+                }`}
+              >
+                {f === "all" ? "All" : f === "guide" ? "Guides" : "Spots"}
+              </button>
+            ))}
+            <button
+              onClick={() => setLowRatingsOnly((v) => !v)}
+              aria-pressed={lowRatingsOnly}
+              className={`flex items-center gap-1 px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+                lowRatingsOnly ? "bg-destructive text-destructive-foreground" : "glass text-muted-foreground"
+              }`}
+            >
+              <Star size={11} /> Low ratings (≤{LOW_RATING_MAX}★)
+            </button>
+          </div>
+
+          {reviewsLoading ? <Spinner /> : reviewsError ? (
+            <ErrorState message={reviewsError} onRetry={fetchReviews} />
+          ) : reviewRows.length === 0 ? (
+            <p className="text-center py-12 text-muted-foreground text-sm">
+              {lowRatingsOnly ? "No low-rated reviews" : "No reviews yet"}
+            </p>
+          ) : (
+            <>
+              {reviewRows.map((review, i) => (
+                <motion.div
+                  key={`${review.kind}-${review.id}`}
+                  initial={{ y: 10, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ delay: i * 0.02 }}
+                  className="glass rounded-2xl p-4 shadow-card space-y-2"
+                >
+                  <div className="flex items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="flex" aria-label={`${review.rating} out of 5 stars`}>
+                          {Array.from({ length: 5 }).map((_, j) => (
+                            <Star key={j} size={11} className={j < review.rating ? "fill-amber-400 text-amber-400" : "text-muted-foreground/30"} />
+                          ))}
+                        </span>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                          review.kind === "guide" ? "bg-blue-500/10 text-blue-600" : "bg-green-500/10 text-green-600"
+                        }`}>
+                          {review.kind === "guide" ? "Guide" : "Spot"}
+                        </span>
+                      </div>
+                      <p className="text-sm font-semibold text-foreground mt-1 truncate">
+                        {review.targetName ?? (review.kind === "guide" ? "Unknown guide" : "Unknown spot")}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => deleteReview(review)}
+                      disabled={deletingReviewId === review.id}
+                      aria-label={`Delete review by ${review.authorName ?? "unknown user"}`}
+                      className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-destructive/10 text-destructive text-xs font-semibold disabled:opacity-50"
+                    >
+                      {deletingReviewId === review.id ? (
+                        <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <><Trash2 size={13} /> Delete</>
+                      )}
+                    </button>
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line break-words">{review.comment}</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    By {review.authorName ?? "Unknown"} • {fmtDate(review.createdAt)}
+                  </p>
+                </motion.div>
+              ))}
+              {reviewRows.length >= ADMIN_REVIEWS_LIMIT && (
+                <p className="text-center text-[10px] text-muted-foreground">Showing the latest {ADMIN_REVIEWS_LIMIT} reviews.</p>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
       {/* ── BOOKINGS ─────────────────────────────────────────────────────────── */}
       {activeTab === "bookings" && (
         <div className="px-6 space-y-3">
           <div className="flex gap-2 overflow-x-auto pb-1">
-            {["all", "pending", "accepted", "completed", "declined", "cancelled"].map((f) => (
+            {["all", "pending", "accepted", "confirmed", "completed", "declined", "cancelled"].map((f) => (
               <button
                 key={f}
                 onClick={() => setBookingFilter(f)}
@@ -1161,7 +1332,7 @@ const AdminDashboard = () => {
                 </ResponsiveContainer>
               </ChartCard>
 
-              <ChartCard title="Revenue — Last 6 Months (₹)">
+              <ChartCard title="Booking Value Requested — Last 6 Months (₹)">
                 <ResponsiveContainer width="100%" height={180}>
                   <BarChart data={analyticsData.monthly} margin={{ top: 4, right: 4, bottom: 0, left: -8 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.1)" />
@@ -1174,7 +1345,7 @@ const AdminDashboard = () => {
                     />
                     <Tooltip
                       contentStyle={{ background: "hsl(var(--background))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }}
-                      formatter={(v: number) => [fmtCurrency(v), "Revenue"]}
+                      formatter={(v: number) => [fmtCurrency(v), "Booking value"]}
                       cursor={{ fill: "rgba(128,128,128,0.08)" }}
                     />
                     <Bar dataKey="revenue" fill="#22c55e" radius={[4, 4, 0, 0]} />
