@@ -1,11 +1,84 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Bell, Calendar, Check, X, MessageCircle, IndianRupee, Users } from "lucide-react";
+import { ArrowLeft, Bell, BellOff, BellRing, Calendar, Check, X, MessageCircle, IndianRupee, Users } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/context/AuthContext";
+import { disablePush, enablePush, getPushStatus, isPushConfigured, isPushSupported, type PushStatus } from "@/lib/push";
 import type { AppNotification, NotificationType } from "@/types/database";
+
+const PUSH_STATUS_TEXT: Record<PushStatus, string> = {
+  enabled: "On for this device, even when Sahayatri is closed.",
+  disabled: "Get alerts on this device even when Sahayatri is closed.",
+  denied: "Blocked by your browser. Allow notifications for this site in your browser settings.",
+  unsupported: "",
+  unconfigured: "",
+};
+
+function PushToggleCard({ userId }: { userId: string }) {
+  const available = isPushSupported() && isPushConfigured();
+  const [status, setStatus] = useState<PushStatus | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!available) return;
+    let active = true;
+    getPushStatus().then((next) => {
+      if (active) setStatus(next);
+    });
+    return () => {
+      active = false;
+    };
+  }, [available, userId]);
+
+  if (!available || status === "unsupported" || status === "unconfigured") return null;
+
+  const enabled = status === "enabled";
+  const toggle = async () => {
+    setSaving(true);
+    try {
+      // enablePush asks for permission first, while this click still counts as a gesture.
+      const { error } = enabled ? await disablePush() : await enablePush(userId);
+      if (error) toast.error(error);
+      else toast.success(enabled ? "Push notifications turned off." : "Push notifications are on for this device.");
+      setStatus(await getPushStatus());
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const Icon = status === "denied" ? BellOff : BellRing;
+  return (
+    <div className="glass rounded-2xl p-4 shadow-card flex items-center gap-3">
+      <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${enabled ? "gradient-primary" : "bg-secondary"}`}>
+        <Icon size={16} className={enabled ? "text-primary-foreground" : "text-muted-foreground"} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <h3 className="text-sm font-semibold text-foreground">Push notifications</h3>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          {saving ? "Updating…" : status ? PUSH_STATUS_TEXT[status] : "Checking this device…"}
+        </p>
+      </div>
+      <button
+        role="switch"
+        aria-checked={enabled}
+        aria-label="Push notifications on this device"
+        onClick={toggle}
+        disabled={saving || status === null || status === "denied"}
+        className={`w-12 h-6 rounded-full relative flex-shrink-0 transition-colors duration-200 ${
+          enabled ? "gradient-primary" : "bg-secondary"
+        } disabled:opacity-60`}
+      >
+        <motion.div
+          animate={{ x: enabled ? 24 : 2 }}
+          transition={{ type: "spring", stiffness: 500, damping: 30 }}
+          className="absolute top-0.5 w-5 h-5 rounded-full bg-primary-foreground shadow-sm"
+        />
+      </button>
+    </div>
+  );
+}
 
 
 const ICONS: Record<NotificationType, { icon: typeof Calendar; color: string }> = {
@@ -100,6 +173,7 @@ const Notifications = () => {
       </div>
 
       <div className="px-6 space-y-3">
+        {user && <PushToggleCard userId={user.id} />}
         {loading ? (
           <div className="flex justify-center py-10">
             <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
