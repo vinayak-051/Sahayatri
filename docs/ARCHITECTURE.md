@@ -98,4 +98,6 @@ CI (`.github/workflows/ci.yml`) runs everything except the end-to-end tests on e
 - Route-level code splitting plus vendor chunks; lazy images; skeletons.
 - Indexes on every foreign key, on `status` fields, and a partial unique index for accepted bookings.
 - Counters and ratings are denormalised and kept in sync by triggers, so list pages stay cheap.
-- **Known limits:** the map loads every spot (viewport loading is planned). Full-text search, server-side chat filtering and SQL aggregates for the admin overview are being merged in Phase 2.
+- Full-text search: a generated `search_vector` column with a GIN index and `search_locations()` (keyset pagination). Chat: `my_conversations()` / `conversation_messages()` on composite indexes. The admin overview is aggregated in SQL.
+- RLS policies wrap `auth.uid()`, `is_admin()` and `is_banned()` in scalar subqueries, so each runs once per query.
+- **Known limits:** the map loads every spot (viewport loading is planned). The Analytics tab downloads six months of bookings. Postgres won't use the GIN index for `@@` under RLS, so search scans active spots (fine at thousands of spots; a SECURITY DEFINER id lookup is the next step at larger scale).

@@ -30,13 +30,37 @@ All notable changes to Sahayatri. Dates are UTC. Work happens on `hardening/phas
 - Onboarded users are no longer shown the role form, which they could no longer submit.
 
 ### Added
+- **Chat:**
+  - live updates arrive only for your own conversations;
+  - reconnecting refetches anything missed;
+  - long threads load in pages;
+  - messages show instantly, with a retry if sending fails;
+  - "Seen" receipts;
+  - message notifications open the right chat.
+- **Search:** finds spots by name, city, tag and description, matching partial words. It never shows stale results, shows the true total, and pages through results consistently.
+- **Travel Buddy is live:** form validation, request status, notifications for requests and acceptances.
+- **Travel Tips** replaces the "AI Guide" placeholder.
+- **Admin:**
+  - the overview is computed in SQL, and "revenue" is now real platform revenue;
+  - a Reviews tab with audited deletion;
+  - "Write review" is shown only to eligible travellers.
+- **Push and offline:**
+  - push notifications are opt-in, with an on/off switch on the Notifications page;
+  - logging out unsubscribes the browser;
+  - the offline shell caches only the app's own files.
 - Spots have their own city.
 - "Add to Calendar" (.ics) for upcoming trips.
 - A day planner on Saved Places: city groups, route order, Google Maps link.
 - Versioned migrations under `backend/supabase/migrations`.
-- A database test suite on PGlite (74 tests).
+- A database test suite on PGlite (118 tests); 153 frontend unit tests.
 - Typecheck and database jobs in CI.
 - The documentation set in `docs/`: audit, roadmap, decisions, architecture, status.
+
+### Changed
+- Row-level security checks run once per query instead of once per row (search about 5× faster on 5,000 spots).
+- TypeScript strict mode is on.
+- Viewing Travel Buddy no longer deletes your expired trips.
+- Price bands no longer overlap: a spot priced exactly ₹2,000 is listed under "₹2k+".
 
 ### Removed
 - `VITE_ADMIN_EMAIL`, which exposed the admin's email in the bundle.

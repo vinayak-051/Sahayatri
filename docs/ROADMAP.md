@@ -28,30 +28,31 @@
 | Payouts, atomic payment capture, view counter, storage limits (D2, B11, D3, B10) | P0 | harness | SECURITY DEFINER functions with checks | Tested | ✅ |
 | Frontend aligned with the new rules (B8, B9, D4) | P0 | migration | Explicit columns, RPCs, error mapping | `tsc`, lint, tests and build pass; forgot password works | ✅ |
 | Dependency security (H1–H3) | P0 | — | Vite 7, Vitest 5, React Router 7, Zod 4; remove unused packages | No high or critical advisories | ✅ |
-| Independent security review of Phase 1 | P0 | all of the above | Review agent | Findings fixed or recorded | 🔄 |
+| Independent security review of Phase 1 | P0 | all of the above | Review agent | Findings fixed or recorded | ✅ (8 findings fixed, with regression tests) |
 
 ## Phase 2: Core product
 | Task | Pri | Depends on | Approach | Done when | Status |
 |---|---|---|---|---|---|
-| Reliable chat (A4, E1) | P1 | Phase 1 | Shared hook, filtered subscriptions, refetch on reconnect, paginated threads, optimistic send, read receipts, `my_conversations()` | Both chat pages use the hook; tests for merge logic and the SQL function | 🔄 |
-| Search and discovery (C3, D5, F4) | P1 | `locations.city` | Full-text search (`search_vector` + GIN), `search_locations()` with keyset pagination, stale-response guard, safe filter quoting, Guides city filter | City and prefix search work; no stale results; tested | 🔄 |
-| Travel Buddy launch (D8) | P1 | Phase 1 | Route the finished page; validation; request states; notifications via triggers; "AI Guide" becomes Travel Tips | `/travel-buddy` works end to end; notification triggers tested | 🔄 |
-| Admin tools (G1, D6, D7) | P1 | Phase 1 | `admin_overview_stats()`, audited `admin_delete_review()`, Reviews tab, review eligibility on guide pages | Overview needs no full-table downloads; moderation tested | 🔄 |
-| Offline shell, push opt-in, auth robustness (F2, B12) | P1 | — | Service worker rewrite, opt-in push controls, non-blocking auth listener | No cross-origin or error caching; no automatic permission prompt; auth tests | 🔄 |
+| Reliable chat (A4, E1) | P1 | Phase 1 | Shared hook, filtered subscriptions, refetch on reconnect, paginated threads, optimistic send, read receipts, `my_conversations()` | Both chat pages use the hook; tests for merge logic and the SQL function | ✅ |
+| Search and discovery (C3, D5, F4) | P1 | `locations.city` | Full-text search (`search_vector` + GIN), `search_locations()` with keyset pagination, stale-response guard, safe filter quoting, Guides city filter | City and prefix search work; no stale results; tested | ✅ |
+| Travel Buddy launch (D8) | P1 | Phase 1 | Route the finished page; validation; request states; notifications via triggers; "AI Guide" becomes Travel Tips | `/travel-buddy` works end to end; notification triggers tested | ✅ |
+| Admin tools (G1, D6, D7) | P1 | Phase 1 | `admin_overview_stats()`, audited `admin_delete_review()`, Reviews tab, review eligibility on guide pages | Overview needs no full-table downloads; moderation tested | ✅ |
+| Offline shell, push opt-in, auth robustness (F2, B12) | P1 | — | Service worker rewrite, opt-in push controls, non-blocking auth listener | No cross-origin or error caching; no automatic permission prompt; auth tests | ✅ |
 
 ## Phase 3: Advanced capabilities
 | Task | Pri | Depends on | Approach | Done when | Status |
 |---|---|---|---|---|---|
 | Guide availability calendar | P2 | booking integrity | `guide_unavailable_dates` table; `prepare_booking` rejects blocked dates; guide calendar UI; traveller date picker greys out blocked days | Booking a blocked date fails (tested); guide can manage dates | ⏳ |
 | Trust signals | P2 | — | "Completed trip" badge on reviews; guide response rate and median response time from bookings (SQL view); member-since | Shown on guide pages; computed in SQL and tested | ⏳ |
-| Day planner for saved spots | P2 | city, search | Group saved spots by city; order a day's route by nearest neighbour on coordinates; show total distance; "Request a guide" for that city | Deterministic and unit-tested; no paid API | ⏳ |
-| Calendar export | P3 | — | `.ics` download for confirmed trips | Valid ICS (unit-tested) | ⏳ |
+| Day planner for saved spots | P2 | city, search | Group saved spots by city; order a day's route by nearest neighbour on coordinates; show total distance; "Request a guide" for that city | Deterministic and unit-tested; no paid API | ✅ |
+| Calendar export | P3 | — | `.ics` download for confirmed trips | Valid ICS (unit-tested) | ✅ |
 | AI trip assistant | P3 | planner | Claude via an edge function, grounded on verified spots | 🔒 Needs a paid API key: the owner decides | 🔒 |
 
 ## Phase 4: Engineering excellence
 | Task | Pri | Depends on | Approach | Done when | Status |
 |---|---|---|---|---|---|
-| TypeScript strict mode (F1) | P1 | Phase 2 merges | Enable `strict`; fix errors | `strict: true`, typecheck green | ⏳ |
+| RLS policy performance | P1 | search | Wrap `auth.uid()` / `is_admin()` / `is_banned()` in scalar subqueries in every policy | No per-row auth calls (tested); search over 5,000 spots ~228 → ~46 ms | ✅ |
+| TypeScript strict mode (F1) | P1 | Phase 2 merges | Enable `strict`; fix errors | `strict: true`, typecheck green | ✅ |
 | Generated database types (A3) | P2 | 🔒 CLI access to a project | `supabase gen types typescript` → typed client | Typed `createClient<Database>` | 🔒 |
 | Data-access layer | P2 | types | Move queries into `src/data/*` modules and hooks with consistent errors | Pages contain no raw query strings for core entities | ⏳ |
 | Map scaling (G1) | P2 | search | Viewport (bounding-box) loading + lightweight grid clustering | Map loads only visible spots; tested helper | ⏳ |
