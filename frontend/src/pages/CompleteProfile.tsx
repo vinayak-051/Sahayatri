@@ -31,10 +31,12 @@ const CompleteProfile = () => {
   useEffect(() => {
     if (!user) return;
     if (user.is_admin) { navigate("/admin", { replace: true }); return; }
-    // Only skip the form if already onboarded AND the stored role matches
-    // the page they came from. If they're stored as traveler but selected
-    // the guide login, fall through to show the guide profile form.
-    if (user.onboarded && (!presetRole || presetRole === user.role)) {
+    // The role is chosen once (the database rejects changes after onboarding),
+    // so an onboarded user always goes to their own dashboard.
+    if (user.onboarded) {
+      if (presetRole && presetRole !== user.role) {
+        toast.info(`This account is registered as a ${user.role === "guide" ? "guide" : "traveller"}.`);
+      }
       navigate(user.role === "guide" ? "/guide-dashboard" : "/home", { replace: true });
     }
   }, [user, navigate, presetRole]);

@@ -86,6 +86,15 @@ Deno.serve(async (req) => {
       if (paise < 100) {
         return json({ error: "This trip has no online price yet. Please arrange payment with your guide." }, 400);
       }
+      // Reuse the open order for this stage so one booking can't collect two payments.
+      const { data: openOrder } = await supabase
+        .from("payments").select("razorpay_order_id, amount")
+        .eq("booking_id", booking.id).eq("stage", stage).eq("status", "created")
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (openOrder && Math.round(Number(openOrder.amount) * 100) === paise) {
+        return json({ order_id: openOrder.razorpay_order_id, amount: paise, currency: "INR", key_id: RAZORPAY_KEY_ID });
+      }
+
       const order = await razorpay("/orders", {
         amount: paise,
         currency: "INR",

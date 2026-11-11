@@ -72,7 +72,10 @@ create or replace view public.admin_profiles with (security_barrier = true) as
   from public.profiles
   where public.is_admin();
 
-revoke all on public.admin_profiles from public, anon;
+-- Read-only: a simple view is auto-updatable, and writes through it would run as
+-- the view owner (skipping RLS and column grants). Revoke everything, then grant
+-- SELECT only.
+revoke all on public.admin_profiles from public, anon, authenticated;
 grant select on public.admin_profiles to authenticated;
 
 -- -----------------------------------------------------------------------------
@@ -260,7 +263,7 @@ begin
 end $$;
 
 drop trigger if exists guard_booking_payment_fields on public.bookings;
-drop function if exists public.guard_booking_payment_fields();
+drop function if exists public.guard_booking_payment_fields() cascade;
 drop trigger if exists enforce_booking_update on public.bookings;
 create trigger enforce_booking_update
   before update on public.bookings
@@ -290,8 +293,16 @@ grant update (is_read) on public.notifications to authenticated;
 -- B6 / C2. Buddy trips are visible to signed-in users only; dates must make
 -- sense; you cannot ask to join your own trip; owners change only the status.
 -- -----------------------------------------------------------------------------
-drop policy if exists "buddy_trips_select_all" on public.buddy_trips;
-drop policy if exists "buddy_trips_select_authenticated" on public.buddy_trips;
+-- Drop every SELECT policy (older installs may use other names), then add ours.
+do $$
+declare p record;
+begin
+  for p in select policyname from pg_policies
+            where schemaname = 'public' and tablename = 'buddy_trips' and cmd = 'SELECT'
+  loop
+    execute format('drop policy %I on public.buddy_trips', p.policyname);
+  end loop;
+end $$;
 create policy "buddy_trips_select_authenticated" on public.buddy_trips
   for select using (auth.uid() is not null);
 
@@ -299,7 +310,16 @@ alter table public.buddy_trips drop constraint if exists buddy_trips_dates_valid
 alter table public.buddy_trips add constraint buddy_trips_dates_valid
   check (end_date >= start_date) not valid;
 
-drop policy if exists "buddy_requests_insert_as_traveler" on public.buddy_requests;
+do $$
+declare p record;
+begin
+  for p in select policyname from pg_policies
+            where schemaname = 'public' and tablename = 'buddy_requests' and cmd = 'INSERT'
+              and permissive = 'PERMISSIVE'
+  loop
+    execute format('drop policy %I on public.buddy_requests', p.policyname);
+  end loop;
+end $$;
 create policy "buddy_requests_insert_as_traveler" on public.buddy_requests
   for insert with check (
     traveler_id = auth.uid()
@@ -316,9 +336,45 @@ grant update (status) on public.buddy_requests to authenticated;
 -- -----------------------------------------------------------------------------
 -- B7. Only admins resolve reports; guides can still read reports on their spots.
 -- -----------------------------------------------------------------------------
-drop policy if exists "reports_update_own_location" on public.reports;
+do $$
+declare p record;
+begin
+  for p in select policyname from pg_policies
+            where schemaname = 'public' and tablename = 'reports' and cmd = 'UPDATE'
+              and policyname <> 'reports_update_admin'
+  loop
+    execute format('drop policy %I on public.reports', p.policyname);
+  end loop;
+end $$;
 revoke update on table public.reports from anon, authenticated;
 grant update (status) on public.reports to authenticated;
+
+-- -----------------------------------------------------------------------------
+-- Insert-time columns. Clients must not choose created_at (the rate limits count
+-- by it), statuses, or reviewer fields; they may only send what their forms send.
+-- messages.id is allowed so the client can generate ids for optimistic sends.
+-- -----------------------------------------------------------------------------
+revoke insert on table public.messages from anon, authenticated;
+grant insert (id, sender_id, receiver_id, content) on public.messages to authenticated;
+
+revoke insert on table public.reports from anon, authenticated;
+grant insert (location_id, reported_by, reason, description) on public.reports to authenticated;
+
+revoke insert on table public.buddy_trips from anon, authenticated;
+grant insert (user_id, destination, start_date, end_date, budget, description)
+  on public.buddy_trips to authenticated;
+
+revoke insert on table public.buddy_requests from anon, authenticated;
+grant insert (trip_id, traveler_id) on public.buddy_requests to authenticated;
+
+revoke insert on table public.verification_requests from anon, authenticated;
+grant insert (guide_id, document_type, document_path) on public.verification_requests to authenticated;
+
+revoke insert on table public.reviews from anon, authenticated;
+grant insert (guide_id, reviewer_id, rating, comment) on public.reviews to authenticated;
+
+revoke insert on table public.location_reviews from anon, authenticated;
+grant insert (location_id, reviewer_id, rating, comment) on public.location_reviews to authenticated;
 
 -- -----------------------------------------------------------------------------
 -- D1. notify_booking_status_change inserts 'booking_advance_paid', which the old
@@ -341,7 +397,13 @@ end $$;
 alter table public.notifications add constraint notifications_type_check check (type in (
   'booking_requested', 'booking_accepted', 'booking_declined', 'booking_advance_paid',
   'booking_cancelled', 'new_message', 'buddy_request_received', 'buddy_request_accepted'
-));
+)) not valid;
+do $$
+begin
+  alter table public.notifications validate constraint notifications_type_check;
+exception when check_violation then
+  raise notice 'notifications contains legacy types; constraint enforced for new rows only';
+end $$;
 
 -- -----------------------------------------------------------------------------
 -- D2. Admin payouts: admins can read the ledger and record payouts through an
@@ -366,14 +428,14 @@ begin
   -- Serialise payouts per guide so two admins cannot pay out the same balance.
   perform pg_advisory_xact_lock(hashtext('payout:' || p_guide_id::text));
   select coalesce(sum(amount), 0) into v_balance from public.guide_ledger where guide_id = p_guide_id;
-  if p_amount > v_balance then
-    raise exception 'Payout exceeds the guide''s balance of %', v_balance using errcode = '22023';
+  if round(p_amount, 2) > round(v_balance, 2) then
+    raise exception 'Payout exceeds the guide''s balance of %', round(v_balance, 2) using errcode = '22023';
   end if;
 
-  insert into public.guide_ledger (guide_id, type, amount) values (p_guide_id, 'payout', -p_amount);
+  insert into public.guide_ledger (guide_id, type, amount) values (p_guide_id, 'payout', -round(p_amount, 2));
   insert into public.admin_actions (admin_id, action, target_id, details)
   values (auth.uid(), 'record_payout', p_guide_id,
-          jsonb_build_object('amount', p_amount, 'balance_before', v_balance));
+          jsonb_build_object('amount', round(p_amount, 2), 'balance_before', round(v_balance, 2)));
 end $$;
 
 revoke all on function public.admin_record_payout(uuid, numeric) from public, anon;
@@ -381,9 +443,27 @@ grant execute on function public.admin_record_payout(uuid, numeric) to authentic
 
 -- -----------------------------------------------------------------------------
 -- B11. Payment capture in one transaction. Claiming the payment row with
--- "where status = 'created'" makes concurrent webhook deliveries safe:
--- only one of them gets the row back.
+-- "where status = 'created'" makes concurrent webhook deliveries safe: only one of
+-- them gets the row back. Money that cannot be applied (the booking was cancelled
+-- meanwhile, or its final payment was already settled) is marked 'needs_refund';
+-- the webhook refunds it and marks it 'refunded', and retries see 'needs_refund'
+-- again until that succeeds.
 -- -----------------------------------------------------------------------------
+do $$
+declare c record;
+begin
+  for c in
+    select conname from pg_constraint
+     where conrelid = 'public.payments'::regclass
+       and contype = 'c'
+       and pg_get_constraintdef(oid) ilike '%status%'
+  loop
+    execute format('alter table public.payments drop constraint %I', c.conname);
+  end loop;
+end $$;
+alter table public.payments add constraint payments_status_check
+  check (status in ('created', 'paid', 'needs_refund', 'refunded')) not valid;
+
 create or replace function public.process_payment_captured(p_order_id text, p_payment_id text)
 returns text language plpgsql security definer set search_path = public as $$
 declare
@@ -398,26 +478,37 @@ begin
   returning * into v_payment;
 
   if not found then
-    if exists (select 1 from public.payments where razorpay_order_id = p_order_id) then
-      return 'already processed';
+    select * into v_payment from public.payments where razorpay_order_id = p_order_id;
+    if not found then
+      return 'no matching order';
+    elsif v_payment.status = 'needs_refund' then
+      return 'needs_refund';   -- an earlier delivery could not complete the refund
     end if;
-    return 'no matching order';
+    return 'already processed';
   end if;
 
   select * into v_booking from public.bookings where id = v_payment.booking_id for update;
   if not found then
-    return 'booking missing';
+    update public.payments set status = 'needs_refund' where id = v_payment.id;
+    return 'needs_refund';
   end if;
 
   if v_payment.stage = 'advance' then
     update public.bookings set status = 'confirmed'
      where id = v_booking.id and status = 'accepted';
-    get diagnostics v_rows = row_count;
-    if v_rows = 0 then
-      return 'booking not awaiting advance';
-    end if;
   else
-    update public.bookings set final_payment_mode = 'online' where id = v_booking.id;
+    update public.bookings set final_payment_mode = 'online'
+     where id = v_booking.id and final_payment_mode is null and status in ('confirmed', 'completed');
+  end if;
+  get diagnostics v_rows = row_count;
+
+  if v_rows = 0 then
+    -- cancelled while paying, a second advance, or the final payment already settled
+    update public.payments set status = 'needs_refund' where id = v_payment.id;
+    return 'needs_refund';
+  end if;
+
+  if v_payment.stage = 'final' then
     insert into public.guide_ledger (guide_id, booking_id, type, amount) values
       (v_booking.guide_id, v_booking.id, 'earning', v_booking.amount),
       (v_booking.guide_id, v_booking.id, 'commission', -round(v_booking.amount * c_commission_rate, 2));

@@ -6,6 +6,9 @@
 //   advance paid -> booking becomes 'confirmed'
 //   final paid   -> final_payment_mode = 'online'; guide credited in guide_ledger
 // It is idempotent: Razorpay retries webhooks, and duplicates are no-ops.
+// A payment that can't be applied (the booking was cancelled while the traveller
+// was paying, or it was already settled) comes back as 'needs_refund' and is
+// refunded in full here.
 //
 // Deploy with verify_jwt = false (see supabase/config.toml): Razorpay sends no
 // Supabase JWT. Configure in the Razorpay dashboard: URL
@@ -15,6 +18,21 @@ import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
 const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 const encoder = new TextEncoder();
+
+// Full refund back to the traveller's original payment method.
+async function refundPayment(paymentId: string) {
+  const auth = btoa(`${Deno.env.get("RAZORPAY_KEY_ID")!}:${Deno.env.get("RAZORPAY_KEY_SECRET")!}`);
+  const res = await fetch(`https://api.razorpay.com/v1/payments/${paymentId}/refund`, {
+    method: "POST",
+    headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json" },
+    body: "{}",
+  });
+  if (res.ok) return;
+  const detail = await res.text();
+  // A retry after the refund went through but before we recorded it: nothing left to refund.
+  if (/fully refunded/i.test(detail)) return;
+  throw new Error(`Razorpay refund failed: ${detail}`);
+}
 
 async function hmacSha256Hex(secret: string, body: string) {
   const key = await crypto.subtle.importKey("raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, [
@@ -53,6 +71,22 @@ Deno.serve(async (req) => {
     // A 5xx makes Razorpay retry, which is safe because processing is idempotent.
     console.error("process_payment_captured failed", error);
     return new Response("processing failed", { status: 500 });
+  }
+  if (data === "needs_refund") {
+    try {
+      await refundPayment(entity.id);
+      const { error: markError } = await supabase
+        .from("payments")
+        .update({ status: "refunded", refund_amount: entity.amount / 100 })
+        .eq("razorpay_order_id", entity.order_id)
+        .eq("status", "needs_refund");
+      if (markError) throw markError;
+      return new Response("refunded");
+    } catch (err) {
+      // 5xx: Razorpay retries, and the payment stays 'needs_refund' until it works.
+      console.error(`refund for payment ${entity.id} failed`, err);
+      return new Response("refund failed", { status: 500 });
+    }
   }
   if (data !== "ok") console.warn(`payment ${entity.id} for order ${entity.order_id}: ${data}`);
   return new Response(String(data));
