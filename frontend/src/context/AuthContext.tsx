@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import type { Session } from "@supabase/supabase-js";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
+import { disablePush } from "@/lib/push";
 import type { Profile, Role } from "@/types/database";
 
 interface RegisterParams {
@@ -188,6 +189,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
+    // Stop this browser receiving the signed-out user's push notifications (shared
+    // devices). Best effort: it must never block signing out.
+    await disablePush().catch(() => undefined);
     await supabase.auth.signOut();
     setLoaded(null);
     setSession(null);
