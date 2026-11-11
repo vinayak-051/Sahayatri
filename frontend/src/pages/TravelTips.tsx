@@ -42,22 +42,22 @@ const TIP_CATEGORIES = [
   },
 ];
 
-const AIGuide = () => {
+const TravelTips = () => {
   const navigate = useNavigate();
   const [openIndex, setOpenIndex] = useState<number | null>(0);
 
   return (
     <div className="flex flex-col min-h-screen gradient-sky">
       <div className="glass px-4 py-3 flex items-center gap-3 border-b border-border">
-        <button onClick={() => navigate(-1)} className="p-1">
+        <button aria-label="Go back" onClick={() => navigate(-1)} className="p-1">
           <ArrowLeft size={22} className="text-foreground" />
         </button>
         <div className="w-9 h-9 rounded-full gradient-primary flex items-center justify-center">
           <Lightbulb size={16} className="text-primary-foreground" />
         </div>
         <div>
-          <h1 className="text-sm font-semibold text-foreground">AI Guide</h1>
-          <p className="text-[10px] text-muted-foreground">Practical checklists, not AI-generated</p>
+          <h1 className="text-sm font-semibold text-foreground">Travel Tips</h1>
+          <p className="text-[10px] text-muted-foreground">Practical checklists for your trip</p>
         </div>
       </div>
 
@@ -86,11 +86,11 @@ const AIGuide = () => {
         ))}
 
         <p className="text-[10px] text-muted-foreground text-center pt-4">
-          These are general, hand-curated travel tips — not a live AI assistant.
+          These are general, hand-curated travel tips. Your guide knows the local details best.
         </p>
       </div>
     </div>
   );
 };
 
-export default AIGuide;
+export default TravelTips;
