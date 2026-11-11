@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Calendar, MapPin, CheckCircle2, XCircle, AlertCircle, MessageSquare, Ban, IndianRupee, Banknote } from "lucide-react";
+import { Calendar, CalendarPlus, MapPin, CheckCircle2, XCircle, AlertCircle, MessageSquare, Ban, IndianRupee, Banknote } from "lucide-react";
 import { toast } from "sonner";
 import BottomNav from "@/components/BottomNav";
 import { supabase } from "@/lib/supabaseClient";
 import { openRazorpayCheckout, type RazorpayOrder } from "@/lib/razorpay";
+import { buildTripIcs, downloadIcs } from "@/lib/ics";
 import { useAuth } from "@/context/AuthContext";
 import type { Booking } from "@/types/database";
 
@@ -80,6 +81,18 @@ const Trips = () => {
     } finally {
       setSubmittingFeedback(null);
     }
+  };
+
+  const addToCalendar = (booking: Booking) => {
+    const guideName = booking.guide?.name ?? "your guide";
+    const ics = buildTripIcs({
+      id: booking.id,
+      date: booking.date,
+      title: `Sahayatri trip: ${booking.destination}`,
+      location: booking.destination,
+      description: `Guided trip with ${guideName} for ${booking.people} ${booking.people === 1 ? "person" : "people"}. Manage it in Sahayatri → My Trips.`,
+    });
+    downloadIcs(`sahayatri-${booking.date}.ics`, ics);
   };
 
   const isTripConcluded = (bookingDate: string) => bookingDate < new Date().toISOString().slice(0, 10);
@@ -302,12 +315,20 @@ const Trips = () => {
                         <IndianRupee size={12} /> Pay ₹{halfAmount(t)} Advance to Confirm
                       </button>
                     )}
-                    <button
-                      onClick={() => handleCancelBooking(t)}
-                      className="w-full py-2 rounded-xl bg-secondary border border-border text-xs font-medium text-destructive flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
-                    >
-                      <Ban size={12} /> Cancel Trip
-                    </button>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => addToCalendar(t)}
+                        className="py-2 rounded-xl bg-secondary border border-border text-xs font-medium text-foreground flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
+                      >
+                        <CalendarPlus size={12} /> Add to Calendar
+                      </button>
+                      <button
+                        onClick={() => handleCancelBooking(t)}
+                        className="py-2 rounded-xl bg-secondary border border-border text-xs font-medium text-destructive flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
+                      >
+                        <Ban size={12} /> Cancel Trip
+                      </button>
+                    </div>
                   </div>
                 </motion.div>
               ))}
