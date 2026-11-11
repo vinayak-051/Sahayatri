@@ -24,7 +24,7 @@ const SECTIONS = [
   },
   {
     title: "6. Data retention",
-    body: "We keep your data as long as your account is active. Cancelled or expired bookings, and expired travel-buddy posts, are removed automatically over time.",
+    body: "We keep your data as long as your account is active. Bookings are kept as a record of your trips and payments. Travel-buddy posts stop being shown once their dates have passed, and you can delete your own posts at any time.",
   },
   {
     title: "7. Contact",
