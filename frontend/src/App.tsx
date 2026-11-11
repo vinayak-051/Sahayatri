@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -21,7 +21,8 @@ const Home = lazy(() => import("./pages/Home"));
 const Explore = lazy(() => import("./pages/Explore"));
 const Trips = lazy(() => import("./pages/Trips"));
 const Profile = lazy(() => import("./pages/Profile"));
-const ComingSoon = lazy(() => import("./pages/ComingSoon"));
+const TravelTips = lazy(() => import("./pages/TravelTips"));
+const TravelBuddy = lazy(() => import("./pages/TravelBuddy"));
 const Guides = lazy(() => import("./pages/Guides"));
 const GuideDetail = lazy(() => import("./pages/GuideDetail"));
 const Safety = lazy(() => import("./pages/Safety"));
@@ -69,8 +70,9 @@ const App = () => (
             <Route path="/explore" element={<ProtectedRoute role="traveler"><Explore /></ProtectedRoute>} />
             <Route path="/trips" element={<ProtectedRoute role="traveler"><Trips /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute role="traveler"><Profile /></ProtectedRoute>} />
-            <Route path="/ai-guide" element={<ProtectedRoute role="traveler"><ComingSoon /></ProtectedRoute>} />
-            <Route path="/travel-buddy" element={<ProtectedRoute role="traveler"><ComingSoon /></ProtectedRoute>} />
+            <Route path="/tips" element={<ProtectedRoute role="traveler"><TravelTips /></ProtectedRoute>} />
+            <Route path="/ai-guide" element={<Navigate to="/tips" replace />} />
+            <Route path="/travel-buddy" element={<ProtectedRoute role="traveler"><TravelBuddy /></ProtectedRoute>} />
             <Route path="/guides" element={<ProtectedRoute role="traveler"><Guides /></ProtectedRoute>} />
             <Route path="/guide/:id" element={<ProtectedRoute role="traveler"><ErrorBoundary><GuideDetail /></ErrorBoundary></ProtectedRoute>} />
             <Route path="/safety" element={<ProtectedRoute role="any"><Safety /></ProtectedRoute>} />
