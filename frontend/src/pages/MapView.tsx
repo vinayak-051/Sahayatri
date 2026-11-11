@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Star } from "lucide-react";
+import { ArrowLeft, MapPin, Star } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
@@ -58,7 +58,7 @@ const MapView = () => {
     const load = async () => {
       setLoading(true);
       const [{ data: locs, error: locsError }, { data: gds, error: gdsError }] = await Promise.all([
-        supabase.from("locations").select("id, title, lat, lng, rating, guide:profiles!locations_guide_id_fkey!inner(is_verified)").eq("status", "active").eq("profiles.is_verified", true),
+        supabase.from("locations").select("id, title, lat, lng, rating, city, guide:profiles!locations_guide_id_fkey!inner(is_verified, city)").eq("status", "active").eq("profiles.is_verified", true),
         supabase.from("profiles").select("id, name, city, rating").eq("role", "guide").eq("is_verified", true),
       ]);
       if (locsError || gdsError) {
@@ -79,6 +79,7 @@ const MapView = () => {
     lat: l.lat,
     lng: l.lng,
     rating: l.rating,
+    city: l.city || l.guide?.city || null,
     type: "destination" as const,
   }));
 
@@ -86,7 +87,7 @@ const MapView = () => {
     const [lat, lng] = coordsForCity(g.city);
     const j1 = (g.id.charCodeAt(0) / 255 - 0.5) * 0.04;
     const j2 = (g.id.charCodeAt(1) / 255 - 0.5) * 0.04;
-    return { id: `guide-${g.id}`, guideId: g.id, name: g.name, lat: lat + j1, lng: lng + j2, rating: g.rating, type: "guide" as const };
+    return { id: `guide-${g.id}`, guideId: g.id, name: g.name, lat: lat + j1, lng: lng + j2, rating: g.rating, city: g.city, type: "guide" as const };
   });
 
   const markers = [
@@ -132,6 +133,11 @@ const MapView = () => {
               <Popup>
                 <div className="text-center p-1">
                   <h3 className="font-semibold text-sm">{m.name}</h3>
+                  {m.city && (
+                    <p className="text-[11px] text-muted-foreground flex items-center justify-center gap-1 mt-0.5">
+                      <MapPin size={10} /> {m.city}
+                    </p>
+                  )}
                   <div className="flex items-center justify-center gap-1 mt-1">
                     <Star size={12} className="text-accent fill-accent" />
                     <span className="text-xs">{m.rating || "New"}</span>

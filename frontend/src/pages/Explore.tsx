@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Search, MapPin, Compass } from "lucide-react";
 import { toast } from "sonner";
 import BottomNav from "@/components/BottomNav";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/lib/supabaseClient";
-import type { Location } from "@/types/database";
+import { friendlyDbError } from "@/lib/dbErrors";
+import { PRICE_BANDS, cursorAfter, searchSpots, type PriceBand, type SpotCursor, type SpotSearchResult } from "@/lib/spotSearch";
 
 const categories = [
   { id: "All", emoji: "🏠", label: "All" },
@@ -19,8 +19,7 @@ const categories = [
 ];
 
 const PAGE_SIZE = 12;
-
-type PriceFilter = "all" | "under500" | "500to2000" | "above2000";
+const LOAD_ERROR = "Couldn't load destinations right now.";
 
 const Explore = () => {
   const navigate = useNavigate();
@@ -28,54 +27,71 @@ const Explore = () => {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [selectedCategory, setSelectedCategory] = useState("All");
-  const [priceFilter, setPriceFilter] = useState<PriceFilter>("all");
-  const [locations, setLocations] = useState<Location[]>([]);
+  const [priceFilter, setPriceFilter] = useState<PriceBand>("all");
+  const [locations, setLocations] = useState<SpotSearchResult[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [offset, setOffset] = useState(0);
-  const [hasMore, setHasMore] = useState(true);
+  const [hasMore, setHasMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // Only the latest request may update the list: older ones are aborted, and the
+  // sequence number drops any response that still arrives late.
+  const requestSeq = useRef(0);
+  const inFlight = useRef<AbortController | null>(null);
 
   useEffect(() => {
     document.title = "Explore India | Sahayatri";
     return () => { document.title = "Sahayatri - Your Journey, Our Guidance"; };
   }, []);
 
-  const fetchLocations = async (reset = false) => {
-    const currentOffset = reset ? 0 : offset;
-    if (reset) setLoading(true); else setLoadingMore(true);
+  useEffect(() => () => {
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    requestSeq.current += 1;
+    inFlight.current?.abort();
+  }, []);
 
-    let query = supabase
-      .from("locations")
-      .select("*, guide:profiles!locations_guide_id_fkey!inner(id, name, profile_photo_url, city, rating)")
-      .eq("status", "active")
-      .eq("profiles.is_verified", true)
-      .order("created_at", { ascending: false })
-      .range(currentOffset, currentOffset + PAGE_SIZE - 1);
+  const fetchLocations = useCallback(async (after: SpotCursor | null) => {
+    inFlight.current?.abort();
+    const controller = new AbortController();
+    inFlight.current = controller;
+    const seq = ++requestSeq.current;
+    if (after) setLoadingMore(true); else { setLoading(true); setLoadingMore(false); setError(null); }
 
-    if (selectedCategory !== "All") query = query.eq("category", selectedCategory);
-    if (priceFilter === "under500") query = query.lt("price_per_person", 500);
-    if (priceFilter === "500to2000") query = query.gte("price_per_person", 500).lte("price_per_person", 2000);
-    if (priceFilter === "above2000") query = query.gt("price_per_person", 2000);
-    if (debouncedSearch.trim()) query = query.or(`title.ilike.%${debouncedSearch.trim()}%,tags.cs.{${debouncedSearch.trim()}}`);
+    const band = PRICE_BANDS[priceFilter];
+    const { rows, error: searchError } = await searchSpots(
+      {
+        query: debouncedSearch,
+        category: selectedCategory === "All" ? null : selectedCategory,
+        minPrice: band.minPrice,
+        maxPrice: band.maxPrice,
+        after,
+        limit: PAGE_SIZE,
+      },
+      controller.signal,
+    );
+    if (seq !== requestSeq.current) return;
+    inFlight.current = null;
 
-    const { data, error } = await query;
-    if (error) {
-      console.error("Failed to load locations:", error.message);
-      toast.error("Couldn't load destinations right now.");
+    if (searchError) {
+      console.error("Failed to load locations:", searchError.message);
+      const message = friendlyDbError(searchError, LOAD_ERROR);
+      if (after) toast.error(message); else setError(message);
     } else {
-      const fetched = (data ?? []) as Location[];
-      setLocations(reset ? fetched : (prev) => [...prev, ...fetched]);
-      setHasMore(fetched.length === PAGE_SIZE);
-      setOffset(currentOffset + PAGE_SIZE);
+      setLocations((prev) => (after ? [...prev, ...rows] : rows));
+      if (rows.length > 0) setTotal(rows[0].total_count); else if (!after) setTotal(0);
+      setHasMore(rows.length === PAGE_SIZE);
     }
-    if (reset) setLoading(false); else setLoadingMore(false);
-  };
+    if (after) setLoadingMore(false); else setLoading(false);
+  }, [debouncedSearch, selectedCategory, priceFilter]);
 
   useEffect(() => {
-    setOffset(0);
-    setHasMore(true);
-    fetchLocations(true);
-  }, [selectedCategory, priceFilter, debouncedSearch]); // eslint-disable-line react-hooks/exhaustive-deps
+    fetchLocations(null);
+  }, [fetchLocations]);
+
+  const loadMore = () => {
+    const last = locations[locations.length - 1];
+    if (last) fetchLocations(cursorAfter(last));
+  };
 
   const filteredItems = locations;
 
@@ -103,15 +119,14 @@ const Explore = () => {
       </div>
 
       <div className="flex gap-2 overflow-x-auto px-6 mb-3 hide-scrollbar">
-        {(["all", "under500", "500to2000", "above2000"] as PriceFilter[]).map((p) => {
-          const labels = { all: "All Prices", under500: "Under ₹500", "500to2000": "₹500–₹2k", above2000: "₹2k+" };
+        {(Object.keys(PRICE_BANDS) as PriceBand[]).map((p) => {
           return (
             <button
               key={p}
               onClick={() => setPriceFilter(p)}
               className={`px-4 py-2 rounded-2xl text-[12px] font-bold whitespace-nowrap transition-all ${priceFilter === p ? "gradient-primary text-primary-foreground shadow-glow" : "glass text-foreground border border-primary/5"}`}
             >
-              {labels[p]}
+              {PRICE_BANDS[p].label}
             </button>
           );
         })}
@@ -140,9 +155,11 @@ const Explore = () => {
             <Compass size={14} className="text-primary animate-spin-slow" />
             {search ? `Searching for "${search}"` : `${selectedCategory} Destinations & Spots`}
           </span>
-          <span className="text-[10px] uppercase tracking-wider bg-primary/10 text-primary px-2.5 py-0.5 rounded-full font-bold">
-            {filteredItems.length} found
-          </span>
+          {!loading && !error && (
+            <span className="text-[10px] uppercase tracking-wider bg-primary/10 text-primary px-2.5 py-0.5 rounded-full font-bold">
+              {total} found
+            </span>
+          )}
         </h2>
 
         {loading ? (
@@ -150,6 +167,16 @@ const Explore = () => {
             {Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="aspect-[3/4] rounded-[2rem] skeleton" />
             ))}
+          </div>
+        ) : error ? (
+          <div className="py-16 text-center glass rounded-3xl border border-dashed border-foreground/10">
+            <p className="text-sm font-bold text-foreground">{error}</p>
+            <button
+              onClick={() => fetchLocations(null)}
+              className="mt-4 px-6 py-2.5 rounded-2xl gradient-primary text-primary-foreground text-sm font-semibold shadow-glow"
+            >
+              Try again
+            </button>
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-4">
@@ -207,10 +234,10 @@ const Explore = () => {
           </div>
         )}
 
-        {hasMore && !loading && !debouncedSearch.trim() && filteredItems.length > 0 && (
+        {hasMore && !loading && !error && filteredItems.length > 0 && (
           <div className="flex justify-center mt-6">
             <button
-              onClick={() => fetchLocations(false)}
+              onClick={loadMore}
               disabled={loadingMore}
               className="px-6 py-2.5 rounded-2xl gradient-primary text-primary-foreground text-sm font-semibold shadow-glow disabled:opacity-60 flex items-center gap-2"
             >

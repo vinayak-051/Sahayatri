@@ -1,24 +1,32 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Star, Globe, Search, MapPin } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { ArrowLeft, Star, Globe, Search, MapPin, X } from "lucide-react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
+import { friendlyDbError } from "@/lib/dbErrors";
+import { containsPattern } from "@/lib/postgrestFilters";
 import type { Profile } from "@/types/database";
 
 const PAGE_SIZE = 15;
 
 const Guides = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  // ?q= searches guide names, ?city= filters by city (Home's "View All" links here).
+  const nameQuery = (searchParams.get("q") ?? "").trim();
+  const cityQuery = (searchParams.get("city") ?? "").trim();
   const [guides, setGuides] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [searchName, setSearchName] = useState("");
-  const [offset, setOffset] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [searchName, setSearchName] = useState(nameQuery);
   const [hasMore, setHasMore] = useState(true);
+  const requestSeq = useRef(0);
 
-  const fetchGuides = async (name = "", reset = false) => {
-    const currentOffset = reset ? 0 : offset;
-    if (reset) setLoading(true); else setLoadingMore(true);
+  const fetchGuides = useCallback(async (offset: number) => {
+    const seq = ++requestSeq.current;
+    if (offset === 0) { setLoading(true); setLoadingMore(false); setError(null); } else setLoadingMore(true);
 
     let query = supabase
       .from("profiles")
@@ -26,40 +34,46 @@ const Guides = () => {
       .eq("role", "guide")
       .eq("is_verified", true)
       .order("name", { ascending: true })
-      .range(currentOffset, currentOffset + PAGE_SIZE - 1);
-    if (name) query = query.ilike("name", `%${name}%`);
+      .order("id", { ascending: true })
+      .range(offset, offset + PAGE_SIZE - 1);
+    if (nameQuery) query = query.ilike("name", containsPattern(nameQuery));
+    if (cityQuery) query = query.ilike("city", containsPattern(cityQuery));
 
-    const { data, error } = await query;
-    if (error) {
-      console.error("Failed to fetch guides:", error.message);
+    const { data, error: fetchError } = await query;
+    if (seq !== requestSeq.current) return;
+    if (fetchError) {
+      console.error("Failed to fetch guides:", fetchError.message);
+      const message = friendlyDbError(fetchError, "Couldn't load guides right now.");
+      if (offset === 0) setError(message); else toast.error(message);
     } else {
       const fetched = (data ?? []) as Profile[];
-      setGuides(reset ? fetched : (prev) => [...prev, ...fetched]);
+      setGuides((prev) => (offset === 0 ? fetched : [...prev, ...fetched]));
       setHasMore(fetched.length === PAGE_SIZE);
-      setOffset(currentOffset + PAGE_SIZE);
     }
-    if (reset) setLoading(false); else setLoadingMore(false);
-  };
+    if (offset === 0) setLoading(false); else setLoadingMore(false);
+  }, [nameQuery, cityQuery]);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const name = params.get("q") || params.get("city") || "";
-    setSearchName(name);
-    setOffset(0);
-    fetchGuides(name, true);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    setSearchName(nameQuery);
+    fetchGuides(0);
+  }, [fetchGuides, nameQuery]);
 
   useEffect(() => {
     document.title = "Find a Guide | Sahayatri";
     return () => { document.title = "Sahayatri - Your Journey, Our Guidance"; };
   }, []);
 
+  const updateParam = (key: "q" | "city", value: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (value) next.set(key, value); else next.delete(key);
+    setSearchParams(next, { replace: true });
+  };
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    if (searchName.trim().length > 0 && searchName.trim().length < 2) return;
-    setOffset(0);
-    setHasMore(true);
-    fetchGuides(searchName, true);
+    const name = searchName.trim();
+    if (name.length === 1) return;
+    if (name === nameQuery) fetchGuides(0); else updateParam("q", name);
   };
 
   return (
@@ -80,10 +94,30 @@ const Guides = () => {
           />
           {loading && <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />}
         </form>
+        {cityQuery && (
+          <div className="mt-3 flex items-center gap-2">
+            <span className="flex items-center gap-1 text-xs font-semibold text-primary bg-primary/10 pl-2.5 pr-1 py-1 rounded-full">
+              <MapPin size={11} /> {cityQuery}
+              <button aria-label="Clear city filter" onClick={() => updateParam("city", "")} className="p-0.5 rounded-full hover:bg-primary/20">
+                <X size={12} />
+              </button>
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="px-6 space-y-3">
-        {guides.length > 0 ? (
+        {error && !loading ? (
+          <div className="text-center py-10 glass rounded-3xl">
+            <p className="text-sm text-foreground">{error}</p>
+            <button
+              onClick={() => fetchGuides(0)}
+              className="mt-4 px-6 py-2.5 rounded-2xl gradient-primary text-primary-foreground text-sm font-semibold shadow-glow"
+            >
+              Try again
+            </button>
+          </div>
+        ) : guides.length > 0 ? (
           guides.map((g, i) => (
             <motion.button
               key={g.id}
@@ -132,14 +166,16 @@ const Guides = () => {
           ))
         ) : !loading ? (
           <div className="text-center py-10 glass rounded-3xl opacity-60">
-            <p className="text-sm">No verified guides found yet.</p>
+            <p className="text-sm">
+              {nameQuery || cityQuery ? "No verified guides match your search." : "No verified guides found yet."}
+            </p>
           </div>
         ) : null}
 
-        {hasMore && !loading && guides.length > 0 && (
+        {hasMore && !loading && !error && guides.length > 0 && (
           <div className="flex justify-center mt-4">
             <button
-              onClick={() => fetchGuides(searchName, false)}
+              onClick={() => fetchGuides(guides.length)}
               disabled={loadingMore}
               className="px-6 py-2.5 rounded-2xl gradient-primary text-primary-foreground text-sm font-semibold shadow-glow disabled:opacity-60 flex items-center gap-2"
             >

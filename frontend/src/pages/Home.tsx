@@ -3,7 +3,10 @@ import { motion } from "framer-motion";
 import { Search, Compass, Users, Star, MapPin, Map, Bell, MessageCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import BottomNav from "@/components/BottomNav";
+import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
+import { friendlyDbError } from "@/lib/dbErrors";
+import { containsPattern, ilikeAnyFilter } from "@/lib/postgrestFilters";
 import { useAuth } from "@/context/AuthContext";
 import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
 import type { Profile, BuddyTrip, Location } from "@/types/database";
@@ -48,17 +51,28 @@ const Home = () => {
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!searchQuery.trim() || searchQuery.trim().length < 2) return;
+    const query = searchQuery.trim();
+    if (query.length < 2) return;
     setSearching(true);
     try {
-      const [{ data: guides }, { data: buddyTrips }] = await Promise.all([
-        supabase.from("profiles").select("id, name, city, specialization, is_verified, profile_photo_url, rating").eq("role", "guide").eq("is_verified", true).or(`name.ilike.%${searchQuery}%,city.ilike.%${searchQuery}%,specialization.ilike.%${searchQuery}%`),
+      const [{ data: guides, error: guidesError }, { data: buddyTrips, error: tripsError }] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("id, name, city, specialization, is_verified, profile_photo_url, rating")
+          .eq("role", "guide")
+          .eq("is_verified", true)
+          .or(ilikeAnyFilter(["name", "city", "specialization"], query)),
         supabase
           .from("buddy_trips")
           .select("*, user:profiles!buddy_trips_user_id_fkey(id, name)")
-          .ilike("destination", `%${searchQuery}%`),
+          .ilike("destination", containsPattern(query)),
       ]);
-      setSearchResults({ query: searchQuery, guides: (guides ?? []) as Profile[], buddyTrips: (buddyTrips ?? []) as BuddyTrip[] });
+      if (guidesError || tripsError) {
+        console.error("Search failed:", guidesError?.message || tripsError?.message);
+        toast.error(friendlyDbError(guidesError || tripsError, "Search isn't working right now. Please try again."));
+        return;
+      }
+      setSearchResults({ query, guides: (guides ?? []) as Profile[], buddyTrips: (buddyTrips ?? []) as BuddyTrip[] });
     } catch (err) {
       console.error("Search failed:", err);
     } finally {
@@ -117,7 +131,7 @@ const Home = () => {
             <div className="mb-6">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-medium text-muted-foreground">Guides</h3>
-                <button onClick={() => navigate(`/guides?city=${searchResults.query}`)} className="text-[10px] text-primary font-bold">View All</button>
+                <button onClick={() => navigate(`/guides?${new URLSearchParams({ city: searchResults.query })}`)} className="text-[10px] text-primary font-bold">View All</button>
               </div>
               <div className="space-y-3">
                 {searchResults.guides.map((g) => (
