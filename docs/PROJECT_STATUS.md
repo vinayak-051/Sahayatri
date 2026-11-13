@@ -1,6 +1,6 @@
 # Project status
 
-**Branch:** `hardening/phase-1` (not merged into `main`, not pushed). **Production:** unchanged; see the blockers below.
+**Branch:** `main` (pushed). **Production (2026-11-13):** all 7 migrations applied, all 3 edge functions deployed, frontend deployed to https://sahayatri-nu.vercel.app.
 
 ## Verified state of the branch
 | Check | Result |
@@ -41,10 +41,10 @@ Not verified: anything against a live Supabase project (Realtime delivery, Stora
 ## Blockers: need the project owner
 | # | Action | Why I can't | How |
 |---|---|---|---|
-| 1 | **Apply the migrations to production** | Your brief forbids altering production without authorisation; it also needs your Supabase login | From `backend/`, run `supabase login`, then `supabase link --project-ref tmxyywcheugmmwzqsovg`. Mark the baseline as applied (`supabase migration repair --status applied 20260709000000`), then run `supabase db push` |
-| 2 | **Deploy the edge functions** | Same | `supabase functions deploy` from `backend/`. Add the header `Authorization: Bearer <service role key>` to the `send-push` Database Webhook |
-| 3 | **Deploy the frontend straight after step 1** | Production deploy | From `frontend/`: `npx vercel deploy --prod`. The current live frontend selects `*` from profiles, which the new rules reject |
-| 4 | Merge `hardening/phase-1` into `main` and push | It's a shared team repository | Review the branch, then merge and push |
+| ✅ | ~~Apply the migrations to production~~ (done 2026-11-13) | Your brief forbids altering production without authorisation; it also needs your Supabase login | From `backend/`, run `supabase login`, then `supabase link --project-ref tmxyywcheugmmwzqsovg`. Mark the baseline as applied (`supabase migration repair --status applied 20260709000000`), then run `supabase db push` |
+| ✅ | ~~Deploy the edge functions~~ (done; `send-push` webhook header still needed once push is configured) | Same | `supabase functions deploy` from `backend/`. Add the header `Authorization: Bearer <service role key>` to the `send-push` Database Webhook |
+| ✅ | ~~Deploy the frontend~~ (done) | Production deploy | From `frontend/`: `npx vercel deploy --prod`. The current live frontend selects `*` from profiles, which the new rules reject |
+| ✅ | ~~Merge into `main` and push~~ (done) | It's a shared team repository | Review the branch, then merge and push |
 | 5 | Staging Supabase project + Vercel Git integration | Creates infrastructure in your accounts | Enables end-to-end tests and preview deploys |
-| 6 | Razorpay test keys and webhook secret in function secrets | Credentials | `supabase secrets set …` (see README) |
+| 6 | Razorpay keys + webhook secret, and `VAPID_PRIVATE_KEY` (push), in function secrets — none are set today, so online payments and push are off | Credentials | `supabase secrets set …` (see README) |
 | 7 | Supabase Auth Site URL and Redirect URLs | Dashboard setting | Set them to https://sahayatri-nu.vercel.app |
