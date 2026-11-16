@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import BottomNav from "@/components/BottomNav";
 import { supabase } from "@/lib/supabaseClient";
 import { openRazorpayCheckout, type RazorpayOrder } from "@/lib/razorpay";
+import { functionErrorMessage, isExpiredRequest } from "@/lib/bookingStatus";
 import { buildTripIcs, downloadIcs } from "@/lib/ics";
 import { useAuth } from "@/context/AuthContext";
 import type { Booking } from "@/types/database";
@@ -64,7 +65,7 @@ const Trips = () => {
           body: { action: "cancel", booking_id: booking.id },
         });
         if (error || data?.error) {
-          toast.error(data?.error ?? "Failed to cancel trip");
+          toast.error(await functionErrorMessage(error, data, "Failed to cancel trip"));
           return;
         }
         if (feedbackText) await supabase.from("bookings").update({ feedback: feedbackText }).eq("id", booking.id);
@@ -104,7 +105,7 @@ const Trips = () => {
         body: { action: "create_order", booking_id: booking.id, stage },
       });
       if (error || data?.error) {
-        toast.error(data?.error ?? "Could not start payment");
+        toast.error(await functionErrorMessage(error, data, "Could not start payment"));
         return;
       }
       await openRazorpayCheckout(data as RazorpayOrder, () => {
@@ -127,7 +128,7 @@ const Trips = () => {
             body: { action: "confirm_cash", booking_id: booking.id },
           });
           if (error || data?.error) {
-            toast.error(data?.error ?? "Could not record cash payment");
+            toast.error(await functionErrorMessage(error, data, "Could not record cash payment"));
             return;
           }
           toast.success("Cash payment recorded");
@@ -148,7 +149,7 @@ const Trips = () => {
               body: { action: "cancel", booking_id: booking.id },
             });
             if (error || data?.error) {
-              toast.error(data?.error ?? "Failed to cancel trip");
+              toast.error(await functionErrorMessage(error, data, "Failed to cancel trip"));
               return;
             }
             toast.success(
@@ -383,7 +384,11 @@ const Trips = () => {
                     </div>
                   </div>
                   <div className="text-right flex flex-col items-end gap-1.5">
-                    <span className="text-[8px] bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">Requested</span>
+                    {isExpiredRequest(t) ? (
+                      <span className="text-[8px] bg-secondary text-muted-foreground border border-border px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">Expired</span>
+                    ) : (
+                      <span className="text-[8px] bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">Requested</span>
+                    )}
                     <p className="text-[10px] text-muted-foreground font-bold">₹{t.amount}</p>
                     <button onClick={() => handleCancelBooking(t)} className="text-[10px] font-bold text-destructive">Cancel</button>
                   </div>

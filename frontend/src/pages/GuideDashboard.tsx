@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import GuideBottomNav from "@/components/GuideBottomNav";
 import { supabase } from "@/lib/supabaseClient";
+import { isExpiredRequest } from "@/lib/bookingStatus";
 import { friendlyDbError } from "@/lib/dbErrors";
 import { useAuth } from "@/context/AuthContext";
 import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
@@ -77,7 +78,8 @@ const GuideDashboard = () => {
     fetchData();
   };
 
-  const pendingBookings = bookings.filter((b) => b.status === "pending");
+  // Requests whose date has passed have expired; they stay on the Bookings page to clear.
+  const pendingBookings = bookings.filter((b) => b.status === "pending" && !isExpiredRequest(b));
   const acceptedBookings = bookings.filter((b) => b.status === "accepted" || b.status === "confirmed");
   const completedBookings = bookings.filter((b) => b.status === "completed");
   const totalEarnings = completedBookings.reduce((sum, b) => sum + Number(b.amount || 0), 0);

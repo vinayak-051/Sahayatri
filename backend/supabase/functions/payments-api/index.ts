@@ -54,6 +54,9 @@ Deno.serve(async (req) => {
   if (!user) return json({ error: "Unauthorized" }, 401);
 
   const { action, booking_id, stage } = await req.json();
+  if (action === "create_order" && (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET)) {
+    return json({ error: "Online payment isn't available yet. Please pay your guide directly." }, 503);
+  }
   const { data: booking } = await supabase.from("bookings").select("*").eq("id", booking_id).single();
   if (!booking || booking.traveler_id !== user.id) return json({ error: "Booking not found" }, 404);
 

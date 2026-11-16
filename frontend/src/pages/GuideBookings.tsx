@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import GuideBottomNav from "@/components/GuideBottomNav";
 import { supabase } from "@/lib/supabaseClient";
+import { isExpiredRequest } from "@/lib/bookingStatus";
 import { friendlyDbError } from "@/lib/dbErrors";
 import { useAuth } from "@/context/AuthContext";
 import type { Booking } from "@/types/database";
@@ -110,7 +111,7 @@ const GuideBookings = () => {
           </div>
           <div className="w-px h-7 bg-border" />
           <div className="text-center">
-            <p className="text-base font-bold text-amber-600">{bookings.filter((b) => b.status === "pending").length}</p>
+            <p className="text-base font-bold text-amber-600">{bookings.filter((b) => b.status === "pending" && !isExpiredRequest(b)).length}</p>
             <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Pending</p>
           </div>
           <div className="w-px h-7 bg-border" />
@@ -173,7 +174,21 @@ const GuideBookings = () => {
                 </div>
 
                 <div className="flex gap-2">
-                  {b.status === "pending" && (
+                  {isExpiredRequest(b) && (
+                    <>
+                      <span className="flex-1 py-2 rounded-xl bg-secondary text-[11px] font-medium text-muted-foreground flex items-center justify-center">
+                        Expired: the trip date has passed
+                      </span>
+                      <button
+                        disabled={isActing}
+                        onClick={() => updateBookingStatus(b.id, "decline")}
+                        className="py-2 px-3 rounded-xl bg-secondary border border-border text-xs font-medium text-foreground flex items-center justify-center gap-1 active:scale-95 transition-transform disabled:opacity-50"
+                      >
+                        <X size={13} /> Clear
+                      </button>
+                    </>
+                  )}
+                  {b.status === "pending" && !isExpiredRequest(b) && (
                     <>
                       <button
                         disabled={isActing}
