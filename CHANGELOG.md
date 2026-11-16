@@ -2,7 +2,25 @@
 
 All notable changes to Sahayatri. Dates are UTC. Work happens on `hardening/phase-1` until it is merged into `main`.
 
-## Unreleased
+## 2026-11-17: production test round
+
+Live cross-account smoke test (`backend/scripts/smoke-production.mjs`): 29/29 pass.
+
+### Fixed
+- **Sign-in on production:** an older admin rule read the admin table directly.
+- **Reviews:** an older review rule let any traveller review any guide without a completed trip, and banned users could post guide reviews.
+- **Expired requests:** pending requests whose date has passed show as "Expired" and can no longer be accepted.
+- **Acceptance wording:** "Booking accepted… Pay the advance to confirm it" replaces "Booking confirmed".
+- **Payments:** the Pay button explains that online payment isn't available yet, instead of a generic error.
+- **Guide profile numbers:** they now come from completed trips and the ledger.
+- **Admin Analytics:** retry instead of an endless spinner on error.
+
+### Added
+- **Guide availability calendar:** guides block dates; requests and acceptances on blocked dates are refused.
+- **Trust strip on guide pages:** completed trips, response rate, typical response time, member since.
+- **Admin Analytics** is aggregated in the database (`admin_booking_timeseries`).
+
+## Earlier
 
 ### Security
 - **Fixed:** `admin_lookup` (who is an admin) was readable and writable through the API.

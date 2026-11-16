@@ -1,6 +1,6 @@
 # Project status
 
-**Branch:** `main` (pushed). **Production (2026-11-13):** all 7 migrations applied, all 3 edge functions deployed, frontend deployed to https://sahayatri-nu.vercel.app.
+**Branch:** `main` (pushed). **Production (2026-11-17):** all 12 migrations applied, edge functions and frontend deployed (https://sahayatri-nu.vercel.app). Live smoke test `backend/scripts/smoke-production.mjs`: 29/29.
 
 ## Verified state of the branch
 | Check | Result |
@@ -32,8 +32,6 @@ Not verified: anything against a live Supabase project (Realtime delivery, Stora
 - **Docs:** README, AUDIT, ROADMAP, DECISIONS, ARCHITECTURE, CHANGELOG, this file.
 
 ## Remaining (by priority)
-1. Guide availability calendar (blocked dates, enforced in `prepare_booking`).
-2. Trust signals on guide pages (completed-trip badges, response rate).
 3. Map viewport loading and clustering; the Analytics tab still downloads six months of bookings.
 4. Accessibility pass; dark mode.
 5. A `pushsubscriptionchange` handler in the service worker; a guide-reviews `deny_banned` policy.
