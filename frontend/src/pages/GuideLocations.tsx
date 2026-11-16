@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
-import { Plus, Trash2, Pencil, MapPin, ArrowLeft, Image as ImageIcon, AlertTriangle, X } from "lucide-react";
+import { Plus, Trash2, Pencil, MapPin, ArrowLeft, Image as ImageIcon, AlertTriangle, X, CalendarDays } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from "react-leaflet";
@@ -275,12 +275,21 @@ const GuideLocations = () => {
           </button>
           <h1 className="text-xl font-bold">My Locations</h1>
         </div>
-        <button
-          onClick={() => (showAddForm ? resetForm() : setShowAddForm(true))}
-          className="p-2 md:px-4 md:py-2 gradient-primary text-primary-foreground rounded-xl shadow-card active:scale-95 transition-transform font-semibold text-sm flex items-center gap-1"
-        >
-          {showAddForm ? "Cancel" : <><Plus size={16} /> Add New</>}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate("/guide-availability")}
+            aria-label="Availability"
+            className="p-2 md:px-4 md:py-2 glass rounded-xl shadow-card active:scale-95 transition-transform font-semibold text-sm flex items-center gap-1"
+          >
+            <CalendarDays size={16} /> <span className="hidden md:inline">Availability</span>
+          </button>
+          <button
+            onClick={() => (showAddForm ? resetForm() : setShowAddForm(true))}
+            className="p-2 md:px-4 md:py-2 gradient-primary text-primary-foreground rounded-xl shadow-card active:scale-95 transition-transform font-semibold text-sm flex items-center gap-1"
+          >
+            {showAddForm ? "Cancel" : <><Plus size={16} /> Add New</>}
+          </button>
+        </div>
       </div>
 
       {showAddForm ? (

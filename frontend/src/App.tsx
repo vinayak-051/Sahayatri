@@ -36,6 +36,7 @@ const GuideBookings = lazy(() => import("./pages/GuideBookings"));
 const GuideProfile = lazy(() => import("./pages/GuideProfile"));
 const GuideMessenger = lazy(() => import("./pages/GuideMessenger"));
 const GuideLocations = lazy(() => import("./pages/GuideLocations"));
+const GuideAvailability = lazy(() => import("./pages/GuideAvailability"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
@@ -88,6 +89,7 @@ const App = () => (
             <Route path="/guide-profile" element={<ProtectedRoute role="guide"><GuideProfile /></ProtectedRoute>} />
             <Route path="/guide-messages" element={<ProtectedRoute role="guide"><GuideMessenger /></ProtectedRoute>} />
             <Route path="/guide-locations" element={<ProtectedRoute role="guide"><GuideLocations /></ProtectedRoute>} />
+            <Route path="/guide-availability" element={<ProtectedRoute role="guide"><GuideAvailability /></ProtectedRoute>} />
 
             {/* Admin */}
             <Route path="/admin" element={<ProtectedRoute role="admin"><AdminDashboard /></ProtectedRoute>} />

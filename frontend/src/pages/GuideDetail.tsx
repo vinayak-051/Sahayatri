@@ -5,6 +5,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
 import { friendlyDbError } from "@/lib/dbErrors";
+import { formatUnavailableHint, validateTripDate } from "@/lib/availability";
+import { useGuideUnavailableDates } from "@/lib/useGuideUnavailableDates";
 import { useAuth } from "@/context/AuthContext";
 import type { Profile, Review } from "@/types/database";
 
@@ -26,6 +28,9 @@ const GuideDetail = () => {
   const [showBookingForm, setShowBookingForm] = useState(false);
   const [bookingDate, setBookingDate] = useState("");
   const [bookingPeople, setBookingPeople] = useState(1);
+  const [bookingDateError, setBookingDateError] = useState<string | null>(null);
+  const unavailableDates = useGuideUnavailableDates(guide?.id, showBookingForm);
+  const unavailableHint = formatUnavailableHint(unavailableDates);
 
   useEffect(() => {
     if (!id) return;
@@ -144,11 +149,15 @@ const GuideDetail = () => {
     tomorrow.setDate(tomorrow.getDate() + 1);
     setBookingDate(tomorrow.toISOString().slice(0, 10));
     setBookingPeople(1);
+    setBookingDateError(null);
     setShowBookingForm(true);
   };
 
   const handleBookGuide = async () => {
     if (!user || !guide || !bookingDate) return;
+    const dateError = validateTripDate(bookingDate, unavailableDates, guide.name);
+    setBookingDateError(dateError);
+    if (dateError) return;
     setBooking(true);
     try {
       const { error } = await supabase.from("bookings").insert({
@@ -422,9 +431,16 @@ const GuideDetail = () => {
                     required
                     min={new Date().toISOString().slice(0, 10)}
                     value={bookingDate}
-                    onChange={(e) => setBookingDate(e.target.value)}
+                    onChange={(e) => {
+                      setBookingDate(e.target.value);
+                      setBookingDateError(null);
+                    }}
+                    aria-label="Trip date"
+                    aria-invalid={!!bookingDateError}
                     className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white outline-none"
                   />
+                  {unavailableHint && <p className="text-[11px] text-white/50 ml-1">{unavailableHint}</p>}
+                  {bookingDateError && <p role="alert" className="text-xs text-red-300 ml-1">{bookingDateError}</p>}
                 </div>
                 <div className="space-y-1">
                   <label className="text-[10px] uppercase font-bold text-white/40 ml-1">Number of people</label>

@@ -6,6 +6,8 @@ import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/context/AuthContext";
 import { friendlyDbError } from "@/lib/dbErrors";
+import { formatUnavailableHint, validateTripDate } from "@/lib/availability";
+import { useGuideUnavailableDates } from "@/lib/useGuideUnavailableDates";
 import type { Location, BuddyTrip, BookingStatus, LocationReview } from "@/types/database";
 
 const LocationDetail = () => {
@@ -26,6 +28,9 @@ const LocationDetail = () => {
   const [requestDate, setRequestDate] = useState("");
   const [requestPeople, setRequestPeople] = useState(1);
   const [requesting, setRequesting] = useState(false);
+  const [requestDateError, setRequestDateError] = useState<string | null>(null);
+  const unavailableDates = useGuideUnavailableDates(location?.guide_id, showRequestForm);
+  const unavailableHint = formatUnavailableHint(unavailableDates);
   const [myRequestStatus, setMyRequestStatus] = useState<BookingStatus | null>(null);
   const [isSaved, setIsSaved] = useState(false);
   const [reviews, setReviews] = useState<LocationReview[]>([]);
@@ -228,6 +233,7 @@ const LocationDetail = () => {
     tomorrow.setDate(tomorrow.getDate() + 1);
     setRequestDate(tomorrow.toISOString().slice(0, 10));
     setRequestPeople(1);
+    setRequestDateError(null);
     setShowRequestForm(true);
   };
 
@@ -241,6 +247,9 @@ const LocationDetail = () => {
       toast.error("This location has an invalid price. Contact the guide directly.");
       return;
     }
+    const dateError = validateTripDate(requestDate, unavailableDates, location.guide?.name);
+    setRequestDateError(dateError);
+    if (dateError) return;
     setRequesting(true);
     try {
       // The database prices the trip from the spot (price × people) and sets the
@@ -607,9 +616,16 @@ const LocationDetail = () => {
                     required
                     min={new Date().toISOString().slice(0, 10)}
                     value={requestDate}
-                    onChange={(e) => setRequestDate(e.target.value)}
+                    onChange={(e) => {
+                      setRequestDate(e.target.value);
+                      setRequestDateError(null);
+                    }}
+                    aria-label="Trip date"
+                    aria-invalid={!!requestDateError}
                     className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white outline-none"
                   />
+                  {unavailableHint && <p className="text-[11px] text-white/50 ml-1">{unavailableHint}</p>}
+                  {requestDateError && <p role="alert" className="text-xs text-red-300 ml-1">{requestDateError}</p>}
                 </div>
                 <div className="space-y-1">
                   <label className="text-[10px] uppercase font-bold text-white/40 ml-1">Number of people</label>
