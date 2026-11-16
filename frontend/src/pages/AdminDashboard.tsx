@@ -14,6 +14,7 @@ import {
 import { supabase } from "@/lib/supabaseClient";
 import { friendlyDbError } from "@/lib/dbErrors";
 import { parseOverviewStats, type AdminOverviewStats } from "@/lib/adminStats";
+import { fetchBookingTimeseries, toDailyChart, toMonthlyChart, type ChartPoint } from "@/lib/guideStats";
 import {
   fetchAdminReviews, ADMIN_REVIEWS_LIMIT, LOW_RATING_MAX,
   type AdminReview, type ReviewKindFilter,
@@ -101,38 +102,6 @@ function fmtCurrency(n: number) {
 
 function fmtDate(d: string) {
   return new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "2-digit" });
-}
-
-type AnalyticsRow = { created_at: string; amount: number; status: string };
-
-function buildDailyData(rows: AnalyticsRow[]) {
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() - (6 - i));
-    const key = d.toISOString().split("T")[0];
-    const hits = rows.filter((r) => r.created_at.startsWith(key));
-    return {
-      label: d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric" }),
-      Requested: hits.length,
-      Accepted: hits.filter((r) => r.status === "accepted" || r.status === "completed").length,
-      revenue: hits.reduce((s, r) => s + (r.amount ?? 0), 0),
-    };
-  });
-}
-
-function buildMonthlyData(rows: AnalyticsRow[]) {
-  return Array.from({ length: 6 }, (_, i) => {
-    const d = new Date();
-    d.setMonth(d.getMonth() - (5 - i));
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    const hits = rows.filter((r) => r.created_at.startsWith(key));
-    return {
-      label: d.toLocaleDateString("en-IN", { month: "short", year: "2-digit" }),
-      Requested: hits.length,
-      Accepted: hits.filter((r) => r.status === "accepted" || r.status === "completed").length,
-      revenue: hits.reduce((s, r) => s + (r.amount ?? 0), 0),
-    };
-  });
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -285,10 +254,7 @@ const AdminDashboard = () => {
   // Overview & Analytics
   const [stats, setStats] = useState<AdminOverviewStats | null>(null);
   const [statsError, setStatsError] = useState<string | null>(null);
-  const [analyticsData, setAnalyticsData] = useState<{
-    daily: ReturnType<typeof buildDailyData>;
-    monthly: ReturnType<typeof buildMonthlyData>;
-  } | null>(null);
+  const [analyticsData, setAnalyticsData] = useState<{ daily: ChartPoint[]; monthly: ChartPoint[] } | null>(null);
 
   useEffect(() => {
     if (!isLoading && !user?.is_admin) navigate("/home");
@@ -525,19 +491,10 @@ const AdminDashboard = () => {
 
   const fetchAnalytics = useCallback(async () => {
     setLoading(true);
-    const since = new Date();
-    since.setMonth(since.getMonth() - 6);
-
-    const { data, error } = await supabase
-      .from("bookings")
-      .select("created_at, amount, status")
-      .gte("created_at", since.toISOString());
-
-    if (error) toast.error("Failed to load analytics");
-    else {
-      const rows = (data ?? []) as AnalyticsRow[];
-      setAnalyticsData({ daily: buildDailyData(rows), monthly: buildMonthlyData(rows) });
-    }
+    // Aggregated in the database (admin_booking_timeseries); no booking rows are downloaded.
+    const { data, error } = await fetchBookingTimeseries(6);
+    if (error || !data) toast.error("Failed to load analytics");
+    else setAnalyticsData({ daily: toDailyChart(data, 7), monthly: toMonthlyChart(data) });
     setLoading(false);
   }, []);
 

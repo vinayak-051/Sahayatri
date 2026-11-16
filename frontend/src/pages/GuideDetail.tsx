@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
 import { friendlyDbError } from "@/lib/dbErrors";
 import { useAuth } from "@/context/AuthContext";
+import { buildTrustItems, fetchGuidePublicStats, type GuidePublicStats } from "@/lib/guideStats";
 import type { Profile, Review } from "@/types/database";
 
 const GuideDetail = () => {
@@ -26,6 +27,7 @@ const GuideDetail = () => {
   const [showBookingForm, setShowBookingForm] = useState(false);
   const [bookingDate, setBookingDate] = useState("");
   const [bookingPeople, setBookingPeople] = useState(1);
+  const [publicStats, setPublicStats] = useState<GuidePublicStats | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -71,6 +73,18 @@ const GuideDetail = () => {
 
   // The database lets a traveller review a guide only after a completed trip with them.
   const userId = user?.id;
+
+  // Trust signals are available to signed-in users only.
+  useEffect(() => {
+    if (!id || !userId) return;
+    let cancelled = false;
+    setPublicStats(null);
+    fetchGuidePublicStats(id).then((stats) => {
+      if (!cancelled) setPublicStats(stats);
+    });
+    return () => { cancelled = true; };
+  }, [id, userId]);
+  const trustItems = userId ? buildTrustItems(publicStats) : [];
   useEffect(() => {
     if (!id || !userId || !isTraveler) return;
     let cancelled = false;
@@ -218,6 +232,16 @@ const GuideDetail = () => {
               </span>
             )}
           </div>
+          {trustItems.length > 0 && (
+            <dl aria-label="Guide track record" className="mt-4 pt-4 border-t border-border flex flex-wrap justify-center gap-x-5 gap-y-2">
+              {trustItems.map((item) => (
+                <div key={item.key} className="flex flex-col-reverse items-center min-w-[64px]">
+                  <dt className="text-[10px] text-muted-foreground">{item.label}</dt>
+                  <dd className="text-sm font-bold text-foreground">{item.value}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
         </motion.div>
 
         <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.1 }} className="glass rounded-2xl p-5 shadow-card mb-4">
