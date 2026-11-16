@@ -8,6 +8,7 @@ import GuideBottomNav from "@/components/GuideBottomNav";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/context/AuthContext";
 import { validateImageFile } from "@/lib/validateImage";
+import { fetchGuideMyStats, type GuideMyStats } from "@/lib/guideStats";
 import type { Location, VerificationRequest, VerificationDocumentType } from "@/types/database";
 
 const DOC_TYPES: { value: VerificationDocumentType; label: string }[] = [
@@ -22,8 +23,8 @@ const GuideProfile = () => {
   const navigate = useNavigate();
   const { user, logout, refreshProfile } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [stats, setStats] = useState({ totalTrips: 0, touristsServed: 0, totalEarnings: 0, avgRating: null as number | null });
-  const [statusCounts, setStatusCounts] = useState({ rejected: 0, accepted: 0, completed: 0 });
+  const [stats, setStats] = useState<GuideMyStats | null>(null);
+  const [statsError, setStatsError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -87,23 +88,10 @@ const GuideProfile = () => {
   const fetchStats = useCallback(async () => {
     if (!user) return;
     setLoading(true);
-    const [{ data: bookings }, { data: ratingRow }] = await Promise.all([
-      supabase.from("bookings").select("status, amount, traveler_id").eq("guide_id", user.id),
-      supabase.from("guide_rating_stats").select("avg_rating").eq("guide_id", user.id).maybeSingle(),
-    ]);
-    const all = bookings ?? [];
-    const relevant = all.filter((b) => b.status === "accepted" || b.status === "completed");
-    setStats({
-      totalTrips: all.length,
-      touristsServed: new Set(relevant.map((b) => b.traveler_id)).size,
-      totalEarnings: relevant.reduce((sum, b) => sum + Number(b.amount || 0), 0),
-      avgRating: ratingRow?.avg_rating ?? null,
-    });
-    setStatusCounts({
-      rejected: all.filter((b) => b.status === "declined").length,
-      accepted: all.filter((b) => b.status === "accepted").length,
-      completed: all.filter((b) => b.status === "completed").length,
-    });
+    // Computed in the database: completed trips and the guide ledger, not raw requests.
+    const result = await fetchGuideMyStats();
+    setStats(result.data);
+    setStatsError(result.error ? "Couldn't load your stats. Please try again later." : null);
     setLoading(false);
   }, [user]);
 
@@ -210,13 +198,19 @@ const GuideProfile = () => {
     }
   };
 
-  const earningsDisplay = stats.totalEarnings >= 1000 ? `₹${(stats.totalEarnings / 1000).toFixed(1)}k` : `₹${stats.totalEarnings}`;
+  const formatRupees = (amount: number) =>
+    Math.abs(amount) >= 1000 ? `₹${(amount / 1000).toFixed(1)}k` : `₹${amount.toLocaleString("en-IN")}`;
 
-  const chartData = [
-    { name: "Rejected", value: statusCounts.rejected, color: "#ef4444" },
-    { name: "Accepted", value: statusCounts.accepted, color: "#f59e0b" },
-    { name: "Completed", value: statusCounts.completed, color: "#22c55e" },
-  ];
+  const byStatus = stats?.bookingsByStatus;
+  const chartData = byStatus
+    ? [
+        { name: "Pending", value: byStatus.pending, color: "#8b5cf6" },
+        { name: "Accepted", value: byStatus.accepted + byStatus.confirmed, color: "#f59e0b" },
+        { name: "Completed", value: byStatus.completed, color: "#22c55e" },
+        { name: "Declined", value: byStatus.declined, color: "#ef4444" },
+        { name: "Cancelled", value: byStatus.cancelled, color: "#94a3b8" },
+      ]
+    : [];
   const hasBookingData = chartData.some((d) => d.value > 0);
 
   if (loading || !user) {
@@ -288,7 +282,7 @@ const GuideProfile = () => {
           <h2 className="text-xl font-bold">{user.name}</h2>
           <div className="flex items-center justify-center gap-3 mt-3">
             <span className="flex items-center gap-1 text-sm font-semibold">
-              <Star size={14} className="text-accent fill-accent" /> {stats.avgRating ? stats.avgRating.toFixed(1) : "New"}
+              <Star size={14} className="text-accent fill-accent" /> {stats?.avgRating ? stats.avgRating.toFixed(1) : "New"}
             </span>
             {user.is_verified ? (
               <span className="flex items-center gap-1 text-[10px] text-primary font-bold bg-primary/10 px-2 py-0.5 rounded-full">
@@ -305,18 +299,24 @@ const GuideProfile = () => {
           </button>
         </motion.div>
 
-        <div className="grid grid-cols-3 gap-3 mb-6">
-          {[
-            { label: "Trips", value: stats.totalTrips },
-            { label: "Tourists", value: stats.touristsServed },
-            { label: "Earnings", value: earningsDisplay },
-          ].map((s, i) => (
-            <motion.div key={s.label} initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.1 + i * 0.05 }} className="glass rounded-2xl p-3 text-center shadow-card">
-              <p className="text-lg font-bold">{s.value}</p>
-              <p className="text-[10px] text-muted-foreground">{s.label}</p>
-            </motion.div>
-          ))}
-        </div>
+        {stats ? (
+          <div className="grid grid-cols-2 gap-3 mb-6">
+            {[
+              { label: "Completed trips", value: stats.completedTrips.toLocaleString("en-IN"), hint: null },
+              { label: "Travellers", value: stats.travellersServed.toLocaleString("en-IN"), hint: null },
+              { label: "Earnings (from ledger)", value: formatRupees(stats.lifetimeEarnings), hint: `After commission · ${formatRupees(stats.ledgerBalance)} balance` },
+              { label: "Pending requests", value: stats.pendingRequests.toLocaleString("en-IN"), hint: null },
+            ].map((s, i) => (
+              <motion.div key={s.label} initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.1 + i * 0.05 }} className="glass rounded-2xl p-3 text-center shadow-card">
+                <p className="text-lg font-bold">{s.value}</p>
+                <p className="text-[10px] text-muted-foreground">{s.label}</p>
+                {s.hint && <p className="text-[9px] text-muted-foreground opacity-70 mt-0.5">{s.hint}</p>}
+              </motion.div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-[11px] text-muted-foreground text-center glass rounded-2xl p-3 shadow-card mb-6">{statsError}</p>
+        )}
 
         <div className="glass rounded-2xl p-4 shadow-card mb-4">
           <div className="flex items-center gap-2 mb-3">
@@ -379,7 +379,9 @@ const GuideProfile = () => {
               </div>
             </div>
           ) : (
-            <p className="text-[11px] text-muted-foreground text-center py-3 opacity-60">No bookings yet</p>
+            <p className="text-[11px] text-muted-foreground text-center py-3 opacity-60">
+              {stats ? "No booking requests yet" : statsError}
+            </p>
           )}
         </div>
 
