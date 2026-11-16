@@ -489,12 +489,18 @@ const AdminDashboard = () => {
     setLoading(false);
   }, []);
 
+  const [analyticsError, setAnalyticsError] = useState(false);
   const fetchAnalytics = useCallback(async () => {
     setLoading(true);
+    setAnalyticsError(false);
     // Aggregated in the database (admin_booking_timeseries); no booking rows are downloaded.
     const { data, error } = await fetchBookingTimeseries(6);
-    if (error || !data) toast.error("Failed to load analytics");
-    else setAnalyticsData({ daily: toDailyChart(data, 7), monthly: toMonthlyChart(data) });
+    if (error || !data) {
+      setAnalyticsError(true);
+      toast.error("Failed to load analytics");
+    } else {
+      setAnalyticsData({ daily: toDailyChart(data, 7), monthly: toMonthlyChart(data) });
+    }
     setLoading(false);
   }, []);
 
@@ -1255,7 +1261,12 @@ const AdminDashboard = () => {
       {/* ── ANALYTICS ────────────────────────────────────────────────────────── */}
       {activeTab === "analytics" && (
         <div className="px-6 space-y-4">
-          {loading || !analyticsData ? <Spinner /> : (
+          {analyticsError && !loading ? (
+            <div className="glass rounded-2xl p-6 text-center space-y-3">
+              <p className="text-sm text-muted-foreground">Couldn't load analytics.</p>
+              <button onClick={fetchAnalytics} className="px-4 py-2 rounded-xl gradient-primary text-primary-foreground text-xs font-bold">Try again</button>
+            </div>
+          ) : loading || !analyticsData ? <Spinner /> : (
             <>
               <ChartCard title="Requested vs Accepted — Last 7 Days">
                 <ResponsiveContainer width="100%" height={200}>
