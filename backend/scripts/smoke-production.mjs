@@ -171,10 +171,13 @@ await step("guide accepts; traveller is notified live (realtime)", async () => {
   );
   return `notification "${row.title}"`;
 });
-await step("payments: advance order (needs Razorpay keys)", async () => {
+await step("payments: advance order or a clear 'not available' message", async () => {
   const { data, error } = await traveler.client.functions.invoke("payments-api", { body: { action: "create_order", booking_id: bookingId, stage: "advance" } });
-  if (error || data?.error) throw new Error(`not available: ${data?.error ?? error.message} (Razorpay secrets are not set)`);
-  return `order ${data.order_id}`;
+  if (!error && !data?.error) return `order ${data.order_id}`;
+  const body = await error?.context?.json?.().catch(() => null);
+  const message = data?.error ?? body?.error;
+  if (!/isn't available yet/.test(message ?? "")) throw new Error(`unclear error: ${message ?? error?.message}`);
+  return `online payments off (Razorpay keys not set): "${message}"`;
 });
 await step("traveller cancels; guide is notified", async () => {
   must(await traveler.client.from("bookings").update({ status: "cancelled" }).eq("id", bookingId));
@@ -271,12 +274,31 @@ await step("guide review needs a completed trip", async () => {
   );
 });
 
+// ---------------------------------------------------------------- availability and guide stats
+await step("guide blocks a date; travellers can't book it", async () => {
+  const date = daysFromNow(50);
+  must(await guide.client.from("guide_unavailable_dates").insert({ guide_id: guide.id, date, note: TAG }));
+  cleanup.push(() => admin.from("guide_unavailable_dates").delete().eq("guide_id", guide.id).eq("date", date));
+  const visible = must(await traveler.client.from("guide_unavailable_dates").select("date").eq("guide_id", guide.id).eq("date", date));
+  if (visible.length !== 1) throw new Error("travellers can't see the blocked date");
+  return expectError(
+    await traveler.client.from("bookings").insert({ traveler_id: traveler.id, guide_id: guide.id, location_id: spot.id, destination: "x", date, people: 1 }),
+    /available on that date/,
+  );
+});
+await step("guide trust stats and own stats load", async () => {
+  const pub = must(await traveler.client.rpc("guide_public_stats", { p_guide_id: guide.id }));
+  const mine = must(await guide.client.rpc("guide_my_stats"));
+  return `public: ${pub?.completed_trips ?? 0} completed trips; own: ${mine?.pending_requests ?? 0} pending`;
+});
+
 // ---------------------------------------------------------------- admin
 await step("admin overview stats (admin account)", async () => {
   const { data: lookup } = await admin.from("admin_lookup").select("user_id").limit(1).single();
   const { data: u } = await admin.auth.admin.getUserById(lookup.user_id);
   const adm = await signIn(u.user.email);
   const stats = must(await adm.client.rpc("admin_overview_stats"));
+  must(await adm.client.rpc("admin_booking_timeseries", { p_months: 6 }));
   must(await adm.client.from("admin_profiles").select("id, email").limit(1));
   await adm.client.auth.signOut();
   return `travellers ${stats.travelers}, guides ${stats.guides}`;
